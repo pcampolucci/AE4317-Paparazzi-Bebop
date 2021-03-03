@@ -10,24 +10,11 @@
  * Example on how to use the colours detected to avoid orange pole in the cyberzoo
  */
 
+
 #ifndef ORANGE_AVOIDER_H
 #define ORANGE_AVOIDER_H
 
 // settings
-// struct point {};
-
-// void build_trajectory(void);
-// build empty trajectory of x,y coordinates
-
-struct point {
-  float x;
-  float y;
-};
-
-#define TRAJECTORY_LENGTH 3
-
-struct point trajectory[TRAJECTORY_LENGTH];
-
 void build_trajectory(void);
 
 // settings

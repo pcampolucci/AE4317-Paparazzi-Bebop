@@ -30,8 +30,7 @@
 
 #define ORANGE_AVOIDER_VERBOSE TRUE
 
-#define LAT_CENTER 4.3767883
-#define LONG_CENTER 51.990634625
+#define TRAJECTORY_LENGTH 1
 
 #define PRINT(string,...) fprintf(stderr, "[orange_avoider->%s()] " string,__FUNCTION__ , ##__VA_ARGS__)
 #if ORANGE_AVOIDER_VERBOSE
@@ -47,6 +46,7 @@ static uint8_t increase_nav_heading(float incrementDegrees);
 static uint8_t chooseRandomIncrementAvoidance(void);
 static uint8_t buildTrajectory(void);
 static uint8_t moveWaypointNext(uint8_t waypoint);
+static uint8_t checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target);
 
 enum navigation_state_t {
   SAFE,
@@ -64,7 +64,10 @@ int32_t color_count = 0;                // orange color count from color filter 
 int16_t obstacle_free_confidence = 0;   // a measure of how certain we are that the way ahead is safe.
 float heading_increment = 5.f;          // heading angle increment [deg]
 float maxDistance = 2.25;               // max waypoint displacement [m]
-uint8_t current_waypoint = 0;
+uint8_t current_waypoint = 0;           // index of the waypoint the drone is going to
+double mse = 10;                        // mean squared error to check if we reached the target waypoint 
+
+struct EnuCoor_i trajectory[TRAJECTORY_LENGTH];
 
 const int16_t max_trajectory_confidence = 5; // number of consecutive negative object detections to be sure we are obstacle free
 
@@ -109,9 +112,9 @@ void orange_avoider_init(void)
 void orange_avoider_periodic(void)
 {
   // only evaluate our state machine if we are flying
-  if(!autopilot_in_flight()){
-    return;
-  }
+  // if(!autopilot_in_flight()){
+  //   return;
+  // }
 
   // compute current color thresholds
   int32_t color_count_threshold = oa_color_count_frac * front_camera.output_size.w * front_camera.output_size.h;
@@ -134,14 +137,15 @@ void orange_avoider_periodic(void)
     case SAFE:
       // Move waypoint forward
       moveWaypointForward(WP_TRAJECTORY, 1.5f * moveDistance);
-      moveWaypointNext(WP_POINT_1);
+      checkWaypointArrival(WP_GOAL, WP_NEXT_TARGET);
       if (!InsideObstacleZone(WaypointX(WP_TRAJECTORY),WaypointY(WP_TRAJECTORY))){
         navigation_state = OUT_OF_BOUNDS;
       } else if (obstacle_free_confidence == 0){
         navigation_state = OBSTACLE_FOUND;
+      } else if (mse < 0.01){
+        moveWaypointNext(WP_NEXT_TARGET);
       } else {
         moveWaypointForward(WP_GOAL, moveDistance);
-        moveWaypointNext(WP_POINT_1);
       }
 
       break;
@@ -261,14 +265,13 @@ uint8_t chooseRandomIncrementAvoidance(void)
 uint8_t buildTrajectory(void) {
   for (int i = 0; i < TRAJECTORY_LENGTH; i++) {
       // deviate from centroid of the cyberzoo by a bit
-      double r = (rand() % 100) - 50;
-      trajectory[i].x = (r/100); // + LAT_CENTER;
-      trajectory[i].y = (r/100); // + LONG_CENTER;
-      VERBOSE_PRINT("Trajectory point added to list: (%lf/%lf) \n", trajectory[i].x, trajectory[i].y);
-      waypoint_move_xy_i(WP_POINT_1, trajectory[0].x, trajectory[0].y);
-      waypoint_move_xy_i(WP_POINT_2, trajectory[1].x, trajectory[1].y);
-      waypoint_move_xy_i(WP_POINT_3, trajectory[2].x, trajectory[2].y);
+      int r_x = (rand() % 1000) - 500;
+      int r_y = (rand() % 1000) - 500;
+      trajectory[i].x = POS_BFP_OF_REAL(r_x/100);
+      trajectory[i].y = POS_BFP_OF_REAL(r_y/100);
+      VERBOSE_PRINT("Trajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(trajectory[i].x), POS_FLOAT_OF_BFP(trajectory[i].y));
   }
+  waypoint_move_xy_i(WP_NEXT_TARGET, trajectory[0].x, trajectory[0].y);
   return false;
 }
 
@@ -277,11 +280,8 @@ uint8_t buildTrajectory(void) {
  */
 uint8_t moveWaypointNext(uint8_t waypoint)
 {
-  struct EnuCoor_i *new_coor;
-  new_coor->x = trajectory[current_waypoint].x;
-  new_coor->y = trajectory[current_waypoint].y;
-  VERBOSE_PRINT("Setting new Waypoint: (%f/%f) \n", POS_FLOAT_OF_BFP(new_coor->x), POS_FLOAT_OF_BFP(new_coor->y));
-  moveWaypoint(waypoint, &new_coor);
+  VERBOSE_PRINT("Setting new Waypoint: (%f/%f) \n", POS_FLOAT_OF_BFP(trajectory[current_waypoint].x), POS_FLOAT_OF_BFP(trajectory[current_waypoint].y));
+  moveWaypoint(waypoint, &trajectory[current_waypoint]);
 
   // update the waypoint index
   if (current_waypoint == TRAJECTORY_LENGTH - 1) {
@@ -289,6 +289,18 @@ uint8_t moveWaypointNext(uint8_t waypoint)
   } else {
     current_waypoint += 1;
   }
+  return false;
+}
+
+/*
+ * Checks if WP_GOAL is very close to WP_TARGET, then change the waypoint
+ */
+uint8_t checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target)
+{
+  double error_x = WaypointX(waypoint_goal) - WaypointX(waypoint_target);
+  double error_y = WaypointY(waypoint_goal) - WaypointY(waypoint_target);
+  mse = sqrt(pow(error_x,2)+pow(error_y,2));
+  VERBOSE_PRINT("Proximity to target (mse): %f \n", mse);
   return false;
 }
 
