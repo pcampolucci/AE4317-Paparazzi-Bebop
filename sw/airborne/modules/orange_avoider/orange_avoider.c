@@ -46,6 +46,7 @@ static uint8_t moveWaypoint(uint8_t waypoint, struct EnuCoor_i *new_coor);
 static uint8_t increase_nav_heading(float incrementDegrees);
 static uint8_t chooseRandomIncrementAvoidance(void);
 static uint8_t buildTrajectory(void);
+static uint8_t moveWaypointNext(uint8_t waypoint);
 
 enum navigation_state_t {
   SAFE,
@@ -63,7 +64,7 @@ int32_t color_count = 0;                // orange color count from color filter 
 int16_t obstacle_free_confidence = 0;   // a measure of how certain we are that the way ahead is safe.
 float heading_increment = 5.f;          // heading angle increment [deg]
 float maxDistance = 2.25;               // max waypoint displacement [m]
-// int current_waypoint = 0;
+uint8_t current_waypoint = 0;
 
 const int16_t max_trajectory_confidence = 5; // number of consecutive negative object detections to be sure we are obstacle free
 
@@ -133,12 +134,14 @@ void orange_avoider_periodic(void)
     case SAFE:
       // Move waypoint forward
       moveWaypointForward(WP_TRAJECTORY, 1.5f * moveDistance);
+      moveWaypointNext(WP_POINT_1);
       if (!InsideObstacleZone(WaypointX(WP_TRAJECTORY),WaypointY(WP_TRAJECTORY))){
         navigation_state = OUT_OF_BOUNDS;
       } else if (obstacle_free_confidence == 0){
         navigation_state = OBSTACLE_FOUND;
       } else {
         moveWaypointForward(WP_GOAL, moveDistance);
+        moveWaypointNext(WP_POINT_1);
       }
 
       break;
@@ -256,19 +259,38 @@ uint8_t chooseRandomIncrementAvoidance(void)
  * Builds the trajectory in the contour by random values
  */
 uint8_t buildTrajectory(void) {
-  for (int new_point = 0; new_point < TRAJECTORY_LENGTH; new_point++) {
+  for (int i = 0; i < TRAJECTORY_LENGTH; i++) {
       // deviate from centroid of the cyberzoo by a bit
-      int r = (rand() % 100000) - 10e5/2;
-      trajectory[new_point].x = (r/10e10) + LAT_CENTER;
-      trajectory[new_point].y = (r/10e10) + LONG_CENTER;
-      VERBOSE_PRINT("Trajectory point added to list: (%lf/%lf) \n", trajectory[new_point].x, trajectory[new_point].y);
+      double r = (rand() % 100) - 50;
+      trajectory[i].x = (r/100); // + LAT_CENTER;
+      trajectory[i].y = (r/100); // + LONG_CENTER;
+      VERBOSE_PRINT("Trajectory point added to list: (%lf/%lf) \n", trajectory[i].x, trajectory[i].y);
+      waypoint_move_xy_i(WP_POINT_1, trajectory[0].x, trajectory[0].y);
+      waypoint_move_xy_i(WP_POINT_2, trajectory[1].x, trajectory[1].y);
+      waypoint_move_xy_i(WP_POINT_3, trajectory[2].x, trajectory[2].y);
   }
   return false;
 }
 
 /*
- * Instead of moving the wp forward, checks the new trajectory wp and sets that one
+ * Calculates coordinates of distance forward and sets waypoint 'waypoint' to those coordinates
  */
+uint8_t moveWaypointNext(uint8_t waypoint)
+{
+  struct EnuCoor_i *new_coor;
+  new_coor->x = trajectory[current_waypoint].x;
+  new_coor->y = trajectory[current_waypoint].y;
+  VERBOSE_PRINT("Setting new Waypoint: (%f/%f) \n", POS_FLOAT_OF_BFP(new_coor->x), POS_FLOAT_OF_BFP(new_coor->y));
+  moveWaypoint(waypoint, &new_coor);
+
+  // update the waypoint index
+  if (current_waypoint == TRAJECTORY_LENGTH - 1) {
+    current_waypoint = 0;
+  } else {
+    current_waypoint += 1;
+  }
+  return false;
+}
 
 
 

@@ -24,10 +24,9 @@ struct point {
   float y;
 };
 
-#define TRAJECTORY_LENGTH 5
+#define TRAJECTORY_LENGTH 3
 
 struct point trajectory[TRAJECTORY_LENGTH];
-
 
 void build_trajectory(void);
 
