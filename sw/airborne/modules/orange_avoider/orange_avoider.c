@@ -30,6 +30,9 @@
 
 #define ORANGE_AVOIDER_VERBOSE TRUE
 
+#define LAT_CENTER 4.3767883
+#define LONG_CENTER 51.990634625
+
 #define PRINT(string,...) fprintf(stderr, "[orange_avoider->%s()] " string,__FUNCTION__ , ##__VA_ARGS__)
 #if ORANGE_AVOIDER_VERBOSE
 #define VERBOSE_PRINT PRINT
@@ -42,6 +45,7 @@ static uint8_t calculateForwards(struct EnuCoor_i *new_coor, float distanceMeter
 static uint8_t moveWaypoint(uint8_t waypoint, struct EnuCoor_i *new_coor);
 static uint8_t increase_nav_heading(float incrementDegrees);
 static uint8_t chooseRandomIncrementAvoidance(void);
+static uint8_t buildTrajectory(void);
 
 enum navigation_state_t {
   SAFE,
@@ -59,6 +63,7 @@ int32_t color_count = 0;                // orange color count from color filter 
 int16_t obstacle_free_confidence = 0;   // a measure of how certain we are that the way ahead is safe.
 float heading_increment = 5.f;          // heading angle increment [deg]
 float maxDistance = 2.25;               // max waypoint displacement [m]
+// int current_waypoint = 0;
 
 const int16_t max_trajectory_confidence = 5; // number of consecutive negative object detections to be sure we are obstacle free
 
@@ -89,6 +94,9 @@ void orange_avoider_init(void)
   // Initialise random values
   srand(time(NULL));
   chooseRandomIncrementAvoidance();
+
+  // set up trajectory
+  buildTrajectory();
 
   // bind our colorfilter callbacks to receive the color filter outputs
   AbiBindMsgVISUAL_DETECTION(ORANGE_AVOIDER_VISUAL_DETECTION_ID, &color_detection_ev, color_detection_cb);
@@ -224,8 +232,6 @@ uint8_t calculateForwards(struct EnuCoor_i *new_coor, float distanceMeters)
  */
 uint8_t moveWaypoint(uint8_t waypoint, struct EnuCoor_i *new_coor)
 {
-  VERBOSE_PRINT("Moving waypoint %d to x:%f y:%f\n", waypoint, POS_FLOAT_OF_BFP(new_coor->x),
-                POS_FLOAT_OF_BFP(new_coor->y));
   waypoint_move_xy_i(waypoint, new_coor->x, new_coor->y);
   return false;
 }
@@ -243,6 +249,26 @@ uint8_t chooseRandomIncrementAvoidance(void)
     heading_increment = -5.f;
     VERBOSE_PRINT("Set avoidance increment to: %f\n", heading_increment);
   }
+  return false; 
+}
+
+/*
+ * Builds the trajectory in the contour by random values
+ */
+uint8_t buildTrajectory(void) {
+  for (int new_point = 0; new_point < TRAJECTORY_LENGTH; new_point++) {
+      // deviate from centroid of the cyberzoo by a bit
+      int r = (rand() % 100000) - 10e5/2;
+      trajectory[new_point].x = (r/10e10) + LAT_CENTER;
+      trajectory[new_point].y = (r/10e10) + LONG_CENTER;
+      VERBOSE_PRINT("Trajectory point added to list: (%lf/%lf) \n", trajectory[new_point].x, trajectory[new_point].y);
+  }
   return false;
 }
+
+/*
+ * Instead of moving the wp forward, checks the new trajectory wp and sets that one
+ */
+
+
 
