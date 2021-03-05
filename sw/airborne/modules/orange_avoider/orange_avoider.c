@@ -31,7 +31,7 @@
 #define ORANGE_AVOIDER_VERBOSE TRUE
 
 #define TRAJECTORY_LENGTH 3
-#define INNER_TRAJECTORY_LENGTH 3
+#define INNER_TRAJECTORY_LENGTH 4
 
 #define PRINT(string,...) fprintf(stderr, "[orange_avoider->%s()] " string,__FUNCTION__ , ##__VA_ARGS__)
 #if ORANGE_AVOIDER_VERBOSE
