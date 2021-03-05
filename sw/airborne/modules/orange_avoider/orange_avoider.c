@@ -30,7 +30,8 @@
 
 #define ORANGE_AVOIDER_VERBOSE TRUE
 
-#define TRAJECTORY_LENGTH 1
+#define TRAJECTORY_LENGTH 3
+#define INNER_TRAJECTORY_LENGTH 3
 
 #define PRINT(string,...) fprintf(stderr, "[orange_avoider->%s()] " string,__FUNCTION__ , ##__VA_ARGS__)
 #if ORANGE_AVOIDER_VERBOSE
@@ -45,6 +46,7 @@ static uint8_t moveWaypoint(uint8_t waypoint, struct EnuCoor_i *new_coor);
 static uint8_t increase_nav_heading(float incrementDegrees);
 static uint8_t chooseRandomIncrementAvoidance(void);
 static uint8_t buildTrajectory(void);
+static uint8_t buildInnerTrajectory(uint8_t curr_coor, uint8_t next_point);
 static uint8_t moveWaypointNext(uint8_t waypoint);
 static uint8_t checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target);
 
@@ -65,9 +67,11 @@ int16_t obstacle_free_confidence = 0;   // a measure of how certain we are that 
 float heading_increment = 5.f;          // heading angle increment [deg]
 float maxDistance = 2.25;               // max waypoint displacement [m]
 uint8_t current_waypoint = 0;           // index of the waypoint the drone is going to
-double mse = 10;                        // mean squared error to check if we reached the target waypoint 
+double mse_outer = 10;                  // mean squared error to check if we reached the outer target waypoint
+double mse_inner = 10;                  // mean squared error to check if we reached the inner target waypoint
 
 struct EnuCoor_i trajectory[TRAJECTORY_LENGTH];
+struct EnuCoor_i inner_trajectory[INNER_TRAJECTORY_LENGTH];
 
 const int16_t max_trajectory_confidence = 5; // number of consecutive negative object detections to be sure we are obstacle free
 
@@ -142,8 +146,17 @@ void orange_avoider_periodic(void)
         navigation_state = OUT_OF_BOUNDS;
       } else if (obstacle_free_confidence == 0){
         navigation_state = OBSTACLE_FOUND;
-      } else if (mse < 0.01){
+      // Reaches outer waypoint
+      } else if (mse_outer < 0.01){
+        // Moves to the next waypoint in the outer trajectory list
         moveWaypointNext(WP_NEXT_TARGET);
+        // Creates the new 'optimized' inner trajectory from the current waypoint to the next waypoint in the outer trajectory list
+        buildInnerTrajectory(current_waypoint, WP_NEXT_TARGET);
+      // Reaches inner waypoint
+      } else if (mse_inner < 0.01){
+        moveWaypointNext()
+
+
       } else {
         moveWaypointForward(WP_GOAL, moveDistance);
       }
@@ -228,7 +241,7 @@ uint8_t calculateForwards(struct EnuCoor_i *new_coor, float distanceMeters)
   // Now determine where to place the waypoint you want to go to
   new_coor->x = stateGetPositionEnu_i()->x + POS_BFP_OF_REAL(sinf(heading) * (distanceMeters));
   new_coor->y = stateGetPositionEnu_i()->y + POS_BFP_OF_REAL(cosf(heading) * (distanceMeters));
-  VERBOSE_PRINT("Calculated %f m forward position. x: %f  y: %f based on pos(%f, %f) and heading(%f)\n", distanceMeters,	
+  VERBOSE_PRINT("Calculated %f m forward position. x: %f  y: %f based on pos(%f, %f) and heading(%f)\n", distanceMeters,
                 POS_FLOAT_OF_BFP(new_coor->x), POS_FLOAT_OF_BFP(new_coor->y),
                 stateGetPositionEnu_f()->x, stateGetPositionEnu_f()->y, DegOfRad(heading));
   return false;
@@ -256,8 +269,24 @@ uint8_t chooseRandomIncrementAvoidance(void)
     heading_increment = -5.f;
     VERBOSE_PRINT("Set avoidance increment to: %f\n", heading_increment);
   }
-  return false; 
+  return false;
 }
+/*
+ * Creates an 'inner' trajectory between the trajectory[i] and trajectory[i+1]
+ */
+uint8_t buildInnerTrajectory(uint8_t curr_coor, uint8_t next_point){
+  double x_diff = WaypointX(next_point) - trajectory[curr_coor].x;
+  double y_diff = WaypointY(next_point) - trajectory[curr_coor].y;
+  float increment_x =  x_diff/(INNER_TRAJECTORY_LENGTH;
+  float increment_y = y_diff/(INNER_TRAJECTORY_LENGTH;
+  for (int i = 0; i < INNER_TRAJECTORY_LENGTH; i++){
+    // Create set of points between current position and the desired waypoint
+    // Currently a straight line
+    inner_trajectory[i].x = i*increment_x + trajectory[curr_coor].x;
+    inner_trajectory[i].y = i*increment_y + trajectory[curr_coor].y;
+  }
+}
+
 
 /*
  * Builds the trajectory in the contour by random values
@@ -265,8 +294,8 @@ uint8_t chooseRandomIncrementAvoidance(void)
 uint8_t buildTrajectory(void) {
   for (int i = 0; i < TRAJECTORY_LENGTH; i++) {
       // deviate from centroid of the cyberzoo by a bit
-      int r_x = (rand() % 1000) - 500;
-      int r_y = (rand() % 1000) - 500;
+      double r_x = (rand() % 1000) - 500;
+      double r_y = (rand() % 1000) - 500;
       trajectory[i].x = POS_BFP_OF_REAL(r_x/100);
       trajectory[i].y = POS_BFP_OF_REAL(r_y/100);
       VERBOSE_PRINT("Trajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(trajectory[i].x), POS_FLOAT_OF_BFP(trajectory[i].y));
@@ -295,14 +324,11 @@ uint8_t moveWaypointNext(uint8_t waypoint)
 /*
  * Checks if WP_GOAL is very close to WP_TARGET, then change the waypoint
  */
-uint8_t checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target)
+uint8_t checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target, uint8_t *trajectory)
 {
   double error_x = WaypointX(waypoint_goal) - WaypointX(waypoint_target);
   double error_y = WaypointY(waypoint_goal) - WaypointY(waypoint_target);
-  mse = sqrt(pow(error_x,2)+pow(error_y,2));
-  VERBOSE_PRINT("Proximity to target (mse): %f \n", mse);
+  trajectory = sqrt(pow(error_x,2)+pow(error_y,2));
+  VERBOSE_PRINT("Proximity to target (mse): %f \n", trajectory);
   return false;
 }
-
-
-
