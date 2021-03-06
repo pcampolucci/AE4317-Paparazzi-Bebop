@@ -107,7 +107,9 @@ void orange_avoider_init(void)
 
   // set up trajectory
   buildTrajectory();
-  buildInnerTrajectory(current_waypoint_outer, WP_NEXT_TARGET);
+  buildInnerTrajectory(WP_STDBY, WP_NEXT_TARGET);
+  waypoint_move_xy_i(WP_NEXT_SUBTARGET, inner_trajectory[0].x, inner_trajectory[0].y);
+
 
   // bind our colorfilter callbacks to receive the color filter outputs
   AbiBindMsgVISUAL_DETECTION(ORANGE_AVOIDER_VISUAL_DETECTION_ID, &color_detection_ev, color_detection_cb);
@@ -146,7 +148,6 @@ void orange_avoider_periodic(void)
       moveWaypointForward(WP_TRAJECTORY, 1.5f * moveDistance);    // Checks 1.5m in front if it reaches the bounds
       mse_outer = checkWaypointArrival(WP_GOAL, WP_NEXT_TARGET, mse_outer);   // Calculate how close it is from the next outer waypoint
       mse_inner = checkWaypointArrival(WP_GOAL, WP_NEXT_SUBTARGET, mse_inner);   // Calculate how close it is from the next inner waypoint
-      VERBOSE_PRINT("MSE inner is %f \n", mse_inner);
       if (!InsideObstacleZone(WaypointX(WP_TRAJECTORY),WaypointY(WP_TRAJECTORY))){
         navigation_state = OUT_OF_BOUNDS;
         VERBOSE_PRINT("I am in navigation state out of bounds\n");
@@ -159,7 +160,7 @@ void orange_avoider_periodic(void)
         // Moves to the next waypoint in the outer trajectory list
         moveWaypointNext(WP_NEXT_TARGET, outer_trajectory, current_waypoint_outer, OUTER_TRAJECTORY_LENGTH);
         // Creates the new 'optimized' inner trajectory from the current waypoint to the next waypoint in the outer trajectory list
-        buildInnerTrajectory(current_waypoint_outer, WP_NEXT_TARGET);
+        buildInnerTrajectory(WP_GOAL, WP_NEXT_TARGET);
       // Reaches inner waypoint
       } else if (mse_inner < 0.05){
         VERBOSE_PRINT("I am in else if mse inner\n"); 
@@ -283,16 +284,16 @@ uint8_t chooseRandomIncrementAvoidance(void)
 /*
  * Creates an 'inner' trajectory between the trajectory[i] and trajectory[i+1]
  */
-uint8_t buildInnerTrajectory(uint8_t curr_coor, uint8_t next_point){
-  double x_diff = WaypointX(next_point) - outer_trajectory[curr_coor].x;
-  double y_diff = WaypointY(next_point) - outer_trajectory[curr_coor].y;
+uint8_t buildInnerTrajectory(uint8_t wp_current, uint8_t wp_next){
+  double x_diff = WaypointX(wp_next) - WaypointX(wp_current);
+  double y_diff = WaypointY(wp_next) - WaypointY(wp_current); 
   float increment_x =  x_diff/(INNER_TRAJECTORY_LENGTH);
   float increment_y = y_diff/(INNER_TRAJECTORY_LENGTH);
-  for (int i = 0; i < INNER_TRAJECTORY_LENGTH; i++){
+  for (int i = 1; i < INNER_TRAJECTORY_LENGTH + 1; i++){
     // Create set of points between current position and the desired waypoint
     // Currently a straight line
-    inner_trajectory[i].x = i*increment_x + outer_trajectory[curr_coor].x;
-    inner_trajectory[i].y = i*increment_y + outer_trajectory[curr_coor].y;
+    inner_trajectory[i].x = POS_BFP_OF_REAL(i*increment_x + WaypointX(wp_current));
+    inner_trajectory[i].y = POS_BFP_OF_REAL(i*increment_y + WaypointY(wp_current));
     VERBOSE_PRINT("Subtrajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(inner_trajectory[i].x), POS_FLOAT_OF_BFP(inner_trajectory[i].y));
 
   }
@@ -324,7 +325,7 @@ uint8_t buildTrajectory(void) {
  */
 uint8_t moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint, uint8_t trajectory_length)
 {
-  //VERBOSE_PRINT("Setting new Waypoint: (%f/%f) \n", POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].x), POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].y));
+  VERBOSE_PRINT("Setting new Waypoint: (%f/%f) \n", POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].x), POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].y));
   
   moveWaypoint(waypoint, &trajectory[index_current_waypoint]);
 
