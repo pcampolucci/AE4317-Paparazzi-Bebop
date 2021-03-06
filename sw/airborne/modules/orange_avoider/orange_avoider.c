@@ -30,7 +30,7 @@
 
 #define ORANGE_AVOIDER_VERBOSE TRUE
 
-#define TRAJECTORY_LENGTH 3
+#define OUTER_TRAJECTORY_LENGTH 3
 #define INNER_TRAJECTORY_LENGTH 4
 
 #define PRINT(string,...) fprintf(stderr, "[orange_avoider->%s()] " string,__FUNCTION__ , ##__VA_ARGS__)
@@ -47,8 +47,8 @@ static uint8_t increase_nav_heading(float incrementDegrees);
 static uint8_t chooseRandomIncrementAvoidance(void);
 static uint8_t buildTrajectory(void);
 static uint8_t buildInnerTrajectory(uint8_t curr_coor, uint8_t next_point);
-static uint8_t moveWaypointNext(uint8_t waypoint);
-static uint8_t checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target);
+static uint8_t moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint, uint8_t trajectory_length);
+static uint8_t checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target, uint8_t mseVar);
 
 enum navigation_state_t {
   SAFE,
@@ -66,12 +66,14 @@ int32_t color_count = 0;                // orange color count from color filter 
 int16_t obstacle_free_confidence = 0;   // a measure of how certain we are that the way ahead is safe.
 float heading_increment = 5.f;          // heading angle increment [deg]
 float maxDistance = 2.25;               // max waypoint displacement [m]
-uint8_t current_waypoint = 0;           // index of the waypoint the drone is going to
+uint8_t current_waypoint_outer = 0;     // index of the outer waypoint the drone is going to
+uint8_t current_waypoint_inner = 0;     // index of the inner waypoint the drone is going to
 double mse_outer = 10;                  // mean squared error to check if we reached the outer target waypoint
 double mse_inner = 10;                  // mean squared error to check if we reached the inner target waypoint
 
-struct EnuCoor_i trajectory[TRAJECTORY_LENGTH];
+struct EnuCoor_i outer_trajectory[OUTER_TRAJECTORY_LENGTH];
 struct EnuCoor_i inner_trajectory[INNER_TRAJECTORY_LENGTH];
+//struct EnuCoor_i inner_trajectory_total[INNER_TRAJECTORY_LENGTH][OUTER_TRAJECTORY_LENGTH]; 
 
 const int16_t max_trajectory_confidence = 5; // number of consecutive negative object detections to be sure we are obstacle free
 
@@ -123,7 +125,7 @@ void orange_avoider_periodic(void)
   // compute current color thresholds
   int32_t color_count_threshold = oa_color_count_frac * front_camera.output_size.w * front_camera.output_size.h;
 
-  VERBOSE_PRINT("Color_count: %d  threshold: %d state: %d \n", color_count, color_count_threshold, navigation_state);
+  //VERBOSE_PRINT("Color_count: %d  threshold: %d state: %d \n", color_count, color_count_threshold, navigation_state);
 
   // update our safe confidence using color threshold
   if(color_count < color_count_threshold){
@@ -140,24 +142,30 @@ void orange_avoider_periodic(void)
   switch (navigation_state){
     case SAFE:
       // Move waypoint forward
-      moveWaypointForward(WP_TRAJECTORY, 1.5f * moveDistance);
-      checkWaypointArrival(WP_GOAL, WP_NEXT_TARGET);
+      moveWaypointForward(WP_TRAJECTORY, 1.5f * moveDistance);    // Checks 1.5m in front if it reaches the bounds
+      checkWaypointArrival(WP_GOAL, WP_NEXT_TARGET, mse_outer);   // Calculate how close it is from the next outer waypoint
+      checkWaypointArrival(WP_GOAL, WP_NEXT_SUBTARGET, mse_inner);   // Calculate how close it is from the next inner waypoint
+      VERBOSE_PRINT("MSE inner is %f \n", mse_inner);
       if (!InsideObstacleZone(WaypointX(WP_TRAJECTORY),WaypointY(WP_TRAJECTORY))){
         navigation_state = OUT_OF_BOUNDS;
+        VERBOSE_PRINT("I am in navigation state out of bounds\n");
       } else if (obstacle_free_confidence == 0){
         navigation_state = OBSTACLE_FOUND;
+        VERBOSE_PRINT("I am in else if obstacle free confidence\n");
       // Reaches outer waypoint
-      } else if (mse_outer < 0.01){
+      } else if (mse_outer < 0.05){
+        VERBOSE_PRINT("I am in else if mse outer\n"); 
         // Moves to the next waypoint in the outer trajectory list
-        moveWaypointNext(WP_NEXT_TARGET);
+        moveWaypointNext(WP_NEXT_TARGET, outer_trajectory, current_waypoint_outer, OUTER_TRAJECTORY_LENGTH);
         // Creates the new 'optimized' inner trajectory from the current waypoint to the next waypoint in the outer trajectory list
-        buildInnerTrajectory(current_waypoint, WP_NEXT_TARGET);
+        buildInnerTrajectory(current_waypoint_outer, WP_NEXT_TARGET);
       // Reaches inner waypoint
-      } else if (mse_inner < 0.01){
-        moveWaypointNext()
-
-
+      } else if (mse_inner < 0.05){
+        VERBOSE_PRINT("I am in else if mse inner\n"); 
+        moveWaypointNext(WP_NEXT_SUBTARGET, inner_trajectory, current_waypoint_inner, INNER_TRAJECTORY_LENGTH);
       } else {
+        VERBOSE_PRINT("I am in else\n"); 
+        NavGotoWaypointHeading(WP_NEXT_SUBTARGET);
         moveWaypointForward(WP_GOAL, moveDistance);
       }
 
@@ -216,7 +224,7 @@ uint8_t increase_nav_heading(float incrementDegrees)
   // for performance reasons the navigation variables are stored and processed in Binary Fixed-Point format
   nav_heading = ANGLE_BFP_OF_REAL(new_heading);
 
-  VERBOSE_PRINT("Increasing heading to %f\n", DegOfRad(new_heading));
+  //VERBOSE_PRINT("Increasing heading to %f\n", DegOfRad(new_heading));
   return false;
 }
 
@@ -241,9 +249,9 @@ uint8_t calculateForwards(struct EnuCoor_i *new_coor, float distanceMeters)
   // Now determine where to place the waypoint you want to go to
   new_coor->x = stateGetPositionEnu_i()->x + POS_BFP_OF_REAL(sinf(heading) * (distanceMeters));
   new_coor->y = stateGetPositionEnu_i()->y + POS_BFP_OF_REAL(cosf(heading) * (distanceMeters));
-  VERBOSE_PRINT("Calculated %f m forward position. x: %f  y: %f based on pos(%f, %f) and heading(%f)\n", distanceMeters,
-                POS_FLOAT_OF_BFP(new_coor->x), POS_FLOAT_OF_BFP(new_coor->y),
-                stateGetPositionEnu_f()->x, stateGetPositionEnu_f()->y, DegOfRad(heading));
+  //VERBOSE_PRINT("Calculated %f m forward position. x: %f  y: %f based on pos(%f, %f) and heading(%f)\n", distanceMeters,
+  //POS_FLOAT_OF_BFP(new_coor->x), POS_FLOAT_OF_BFP(new_coor->y),
+  //stateGetPositionEnu_f()->x, stateGetPositionEnu_f()->y, DegOfRad(heading));
   return false;
 }
 
@@ -264,10 +272,10 @@ uint8_t chooseRandomIncrementAvoidance(void)
   // Randomly choose CW or CCW avoiding direction
   if (rand() % 2 == 0) {
     heading_increment = 5.f;
-    VERBOSE_PRINT("Set avoidance increment to: %f\n", heading_increment);
+    //VERBOSE_PRINT("Set avoidance increment to: %f\n", heading_increment);
   } else {
     heading_increment = -5.f;
-    VERBOSE_PRINT("Set avoidance increment to: %f\n", heading_increment);
+    //VERBOSE_PRINT("Set avoidance increment to: %f\n", heading_increment);
   }
   return false;
 }
@@ -275,48 +283,56 @@ uint8_t chooseRandomIncrementAvoidance(void)
  * Creates an 'inner' trajectory between the trajectory[i] and trajectory[i+1]
  */
 uint8_t buildInnerTrajectory(uint8_t curr_coor, uint8_t next_point){
-  double x_diff = WaypointX(next_point) - trajectory[curr_coor].x;
-  double y_diff = WaypointY(next_point) - trajectory[curr_coor].y;
-  float increment_x =  x_diff/(INNER_TRAJECTORY_LENGTH;
-  float increment_y = y_diff/(INNER_TRAJECTORY_LENGTH;
+  double x_diff = WaypointX(next_point) - outer_trajectory[curr_coor].x;
+  double y_diff = WaypointY(next_point) - outer_trajectory[curr_coor].y;
+  float increment_x =  x_diff/(INNER_TRAJECTORY_LENGTH);
+  float increment_y = y_diff/(INNER_TRAJECTORY_LENGTH);
   for (int i = 0; i < INNER_TRAJECTORY_LENGTH; i++){
     // Create set of points between current position and the desired waypoint
     // Currently a straight line
-    inner_trajectory[i].x = i*increment_x + trajectory[curr_coor].x;
-    inner_trajectory[i].y = i*increment_y + trajectory[curr_coor].y;
-  }
-}
+    inner_trajectory[i].x = i*increment_x + outer_trajectory[curr_coor].x;
+    inner_trajectory[i].y = i*increment_y + outer_trajectory[curr_coor].y;
+    VERBOSE_PRINT("Subtrajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(inner_trajectory[i].x), POS_FLOAT_OF_BFP(inner_trajectory[i].y));
 
+  }
+  //inner_trajectory_total[curr_coor] = inner_trajectory;  
+
+
+
+  return false; 
+}
 
 /*
  * Builds the trajectory in the contour by random values
  */
 uint8_t buildTrajectory(void) {
-  for (int i = 0; i < TRAJECTORY_LENGTH; i++) {
+  for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++) {
       // deviate from centroid of the cyberzoo by a bit
       double r_x = (rand() % 1000) - 500;
       double r_y = (rand() % 1000) - 500;
-      trajectory[i].x = POS_BFP_OF_REAL(r_x/100);
-      trajectory[i].y = POS_BFP_OF_REAL(r_y/100);
-      VERBOSE_PRINT("Trajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(trajectory[i].x), POS_FLOAT_OF_BFP(trajectory[i].y));
+      outer_trajectory[i].x = POS_BFP_OF_REAL(r_x/100);
+      outer_trajectory[i].y = POS_BFP_OF_REAL(r_y/100);
+      VERBOSE_PRINT("Trajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(outer_trajectory[i].x), POS_FLOAT_OF_BFP(outer_trajectory[i].y));
   }
-  waypoint_move_xy_i(WP_NEXT_TARGET, trajectory[0].x, trajectory[0].y);
+  waypoint_move_xy_i(WP_NEXT_TARGET, outer_trajectory[0].x, outer_trajectory[0].y);
   return false;
 }
 
 /*
  * Calculates coordinates of distance forward and sets waypoint 'waypoint' to those coordinates
  */
-uint8_t moveWaypointNext(uint8_t waypoint)
+uint8_t moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint, uint8_t trajectory_length)
 {
-  VERBOSE_PRINT("Setting new Waypoint: (%f/%f) \n", POS_FLOAT_OF_BFP(trajectory[current_waypoint].x), POS_FLOAT_OF_BFP(trajectory[current_waypoint].y));
-  moveWaypoint(waypoint, &trajectory[current_waypoint]);
+  //VERBOSE_PRINT("Setting new Waypoint: (%f/%f) \n", POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].x), POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].y));
+  
+  moveWaypoint(waypoint, &trajectory[index_current_waypoint]);
 
   // update the waypoint index
-  if (current_waypoint == TRAJECTORY_LENGTH - 1) {
-    current_waypoint = 0;
-  } else {
-    current_waypoint += 1;
+  if (index_current_waypoint == trajectory_length - 1) {
+    index_current_waypoint = 0;
+  } 
+  else {
+    index_current_waypoint += 1;
   }
   return false;
 }
@@ -324,11 +340,11 @@ uint8_t moveWaypointNext(uint8_t waypoint)
 /*
  * Checks if WP_GOAL is very close to WP_TARGET, then change the waypoint
  */
-uint8_t checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target, uint8_t *trajectory)
+uint8_t checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target, uint8_t mseVar)
 {
   double error_x = WaypointX(waypoint_goal) - WaypointX(waypoint_target);
   double error_y = WaypointY(waypoint_goal) - WaypointY(waypoint_target);
-  trajectory = sqrt(pow(error_x,2)+pow(error_y,2));
-  VERBOSE_PRINT("Proximity to target (mse): %f \n", trajectory);
+  mseVar = sqrt(pow(error_x,2)+pow(error_y,2));
+  //VERBOSE_PRINT("Proximity to target (mse): %f, \n", mseVar);
   return false;
 }
