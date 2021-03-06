@@ -48,7 +48,7 @@ static uint8_t chooseRandomIncrementAvoidance(void);
 static uint8_t buildTrajectory(void);
 static uint8_t buildInnerTrajectory(uint8_t curr_coor, uint8_t next_point);
 static uint8_t moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint, uint8_t trajectory_length);
-static uint8_t checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target, uint8_t mseVar);
+static double checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target, double mseVar);
 
 enum navigation_state_t {
   SAFE,
@@ -107,6 +107,7 @@ void orange_avoider_init(void)
 
   // set up trajectory
   buildTrajectory();
+  buildInnerTrajectory(current_waypoint_outer, WP_NEXT_TARGET);
 
   // bind our colorfilter callbacks to receive the color filter outputs
   AbiBindMsgVISUAL_DETECTION(ORANGE_AVOIDER_VISUAL_DETECTION_ID, &color_detection_ev, color_detection_cb);
@@ -143,8 +144,8 @@ void orange_avoider_periodic(void)
     case SAFE:
       // Move waypoint forward
       moveWaypointForward(WP_TRAJECTORY, 1.5f * moveDistance);    // Checks 1.5m in front if it reaches the bounds
-      checkWaypointArrival(WP_GOAL, WP_NEXT_TARGET, mse_outer);   // Calculate how close it is from the next outer waypoint
-      checkWaypointArrival(WP_GOAL, WP_NEXT_SUBTARGET, mse_inner);   // Calculate how close it is from the next inner waypoint
+      mse_outer = checkWaypointArrival(WP_GOAL, WP_NEXT_TARGET, mse_outer);   // Calculate how close it is from the next outer waypoint
+      mse_inner = checkWaypointArrival(WP_GOAL, WP_NEXT_SUBTARGET, mse_inner);   // Calculate how close it is from the next inner waypoint
       VERBOSE_PRINT("MSE inner is %f \n", mse_inner);
       if (!InsideObstacleZone(WaypointX(WP_TRAJECTORY),WaypointY(WP_TRAJECTORY))){
         navigation_state = OUT_OF_BOUNDS;
@@ -340,11 +341,11 @@ uint8_t moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t
 /*
  * Checks if WP_GOAL is very close to WP_TARGET, then change the waypoint
  */
-uint8_t checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target, uint8_t mseVar)
+double checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target, double mseVar)
 {
   double error_x = WaypointX(waypoint_goal) - WaypointX(waypoint_target);
   double error_y = WaypointY(waypoint_goal) - WaypointY(waypoint_target);
   mseVar = sqrt(pow(error_x,2)+pow(error_y,2));
-  //VERBOSE_PRINT("Proximity to target (mse): %f, \n", mseVar);
-  return false;
+  VERBOSE_PRINT("Proximity to target (mse): %f, \n", mseVar);
+  return mseVar;
 }
