@@ -9,6 +9,7 @@
         "editor.tabSize": 4,
     },
     "files.associations": {
-        "cmath": "c"
+        "cmath": "c",
+        "array": "c"
     },
 }
