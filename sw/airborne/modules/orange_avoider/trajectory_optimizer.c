@@ -16,12 +16,13 @@
 
 #define ORANGE_AVOIDER_VERBOSE TRUE
 
+// Local constants
 #define KP 5
 #define ETA 100
 #define AREA_WIDTH 30
 #define OSCILLATION_DETECTION_LENGTH 6
-#define INNER_TRAJECTORY_LENGTH 5
-#define OBSTACLES_IN_MAP 3
+#define GRID_SIZE 0.1
+#define DRONE_RADIUS 0.3
 
 #ifdef INFINITY
 /* INFINITY is supported */
@@ -34,83 +35,15 @@
 #define VERBOSE_PRINT(...)
 #endif
 
-// obstacle struct used for obstacle classification
-struct Obstacle {
-  struct EnuCoor_i loc;
-  double width;
-  double heading;
-  double depth;
-};
-
-struct dpoint {
-  int dx;
-  int dy;
-};
-
-struct Trajectory {
-  double *x;
-  double *y;
-  int size;
-};
-
-struct PotentialMap {
-  double **pmap;    // potential 2d map
-  int size_x;
-  int size_y;
-  double minx;
-  double miny;
-};
-
-// define settings
-float grid_size = 0.1;     // potential grid size [m]
-float robot_radius = 0.5;  // robot radius [m]
-double minx;
-double miny;
-struct dpoint motion[8];
-struct Trajectory resulting_trajectory;
+// Initialize objects
+struct DPoint motion[8];                    // motion choices for trajectory
+struct Trajectory resulting_trajectory;     // final optimized trajectory object
 struct PotentialMap potential;
-
-
-// define objects to specify
-
-
-// declare functions 
-// static void optimize_trajectory(struct Obstacle obstacle_map, struct EnuCoor_i start_trajectory);
-// static double potential_field_planning(double sx, double sy, double gx, double gy, double ox, double oy, double reso, double rr);
-// static double calc_potential_field(double gx, double gy, double ox, double oy, double reso, double rr, double sx, double sy);
-// static double calc_attractive_potential(double x, double y, double gx, double gy);
-// static double calc_repulsive_potential(double x, double y, double ox, double oy, double rr);
-// static void get_motion_model();
-// static double oscillations_detection(double previous_ids, double ix, double iy);
-
-// helpers
-
-// return max of the array 
-int MaxArray(double *array, int n) 
-{ 
-    int mx = INT8_MIN; 
-    for (int i = 0; i < n; i++) { 
-        int temp = array[i];
-        mx = Max(mx, temp); 
-    } 
-    return mx; 
-}
-
-// return min of the array 
-int MinArray(double *array, int n) 
-{ 
-    int mx = INT8_MIN; 
-    for (int i = 0; i < n; i++) { 
-        int temp = array[i];
-        mx = Min(mx, temp); 
-    } 
-    return mx; 
-}
 
 /*
  * Do the actual magic
  */
-void optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory) {
+struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory) {
   VERBOSE_PRINT("Trajectory Optimisation Started \n");
 
   // setup initial conditions required for the optimisation
@@ -119,45 +52,39 @@ void optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_
   double gx = POS_FLOAT_OF_BFP(start_trajectory[INNER_TRAJECTORY_LENGTH-1].x);      // final point in x [m]
   double gy = POS_FLOAT_OF_BFP(start_trajectory[INNER_TRAJECTORY_LENGTH-1].y);      // final point in y [m]
 
-  VERBOSE_PRINT("1\n");
-
   // get list of obstacles that will be inserted in the optimisation
   double *ox = malloc(sizeof(double*) * OBSTACLES_IN_MAP);
   double *oy = malloc(sizeof(double*) * OBSTACLES_IN_MAP);
 
-  VERBOSE_PRINT("2\n");
-
   for (int i = 0; i < OBSTACLES_IN_MAP; i++) {
-    ox[i] = obstacle_map[i].loc.x;
-    oy[i] = obstacle_map[i].loc.y;
+    ox[i] = POS_FLOAT_OF_BFP(obstacle_map[i].loc.x);
+    oy[i] = POS_FLOAT_OF_BFP(obstacle_map[i].loc.y);
+    VERBOSE_PRINT("Obstacle in Map (%f/%f)\n", ox[i], oy[i]);
   }
 
   VERBOSE_PRINT("Received Trajectory of length: %d\n", INNER_TRAJECTORY_LENGTH);
   VERBOSE_PRINT("Initial Trajectory of length: %d\n", resulting_trajectory.size);
   VERBOSE_PRINT("Sending (%f/%f) as starting point\n", sx, sy);
   VERBOSE_PRINT("Sending (%f/%f) as goal point\n", gx, gy);
-  VERBOSE_PRINT("Sending (%f) as grid size\n", grid_size);
-  VERBOSE_PRINT("Sending (%f) as drone radius\n", robot_radius);
+  // VERBOSE_PRINT("Sending (%f) as grid size\n", grid_size);
+  // VERBOSE_PRINT("Sending (%f) as drone radius\n", robot_radius);
 
   // run the optimisation and return a new Trajectory
-  potential_field_planning(sx, sy, gx, gy, ox, oy, grid_size, robot_radius);
+  potential_field_planning(sx, sy, gx, gy, ox, oy, GRID_SIZE, DRONE_RADIUS);
 
   VERBOSE_PRINT("Post Computed Trajectory of length: %d\n", resulting_trajectory.size);
 
-  VERBOSE_PRINT("4\n");
-
   // once this is done rx and ry should be ready to be sent to the Trajectory
   // first we reallocate once the Trajectory to the new length
-  //start_trajectory = (struct EnuCoor_i *)realloc(start_trajectory, sizeof(struct EnuCoor_i) * resulting_trajectory.size);
+  start_trajectory = realloc(start_trajectory, sizeof(struct EnuCoor_i) * resulting_trajectory.size);
 
-  VERBOSE_PRINT("5\n");
   // then we go through the whole new Trajectory to assign the new values
   for (int i = 0; i < resulting_trajectory.size; i++) {
-    start_trajectory[i].x = resulting_trajectory.x[i];
-    start_trajectory[i].y = resulting_trajectory.y[i];
+    start_trajectory[i].x = POS_BFP_OF_REAL(resulting_trajectory.x[i]);
+    start_trajectory[i].y = POS_BFP_OF_REAL(resulting_trajectory.y[i]);
   }
 
-  VERBOSE_PRINT("6\n");
+  return start_trajectory;
 
 }
 
@@ -166,7 +93,7 @@ void optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_
  */
 void potential_field_planning(double sx, double sy, double gx, double gy, double *ox, double *oy, double reso, double rr) {
 
-  VERBOSE_PRINT("Potential Field Calculation started\n");
+  //VERBOSE_PRINT("Potential Field Calculation started\n");
 
   // update old field information
   calc_potential_field(gx, gy, ox, oy, reso, rr, sx, sy);
@@ -176,8 +103,8 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
 
   // search path
   double d = hypot(sx - gx, sy - gy);
-  int ix = round((sx - minx) / reso);
-  int iy = round((sy - miny) / reso);
+  int ix = round((sx - potential.minx) / reso);
+  int iy = round((sy - potential.miny) / reso);
   int minix = 0;
   int miniy = 0;
   double p;
@@ -197,7 +124,7 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
   while (d >= reso) {
     double minp = INFINITY;
 
-    double motion_len = sizeof(motion);
+    double motion_len = sizeof(motion) / sizeof(motion[0]);
 
     for (int i = 0; i < motion_len; i++) {
       int inx = ix + motion[i].dx;
@@ -229,11 +156,11 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
 
     // now we can expand the solution space and add a new point
     trajectory_size += 1;
-    rx = realloc(rx, sizeof(double*) * trajectory_size);
-    ry = realloc(ry, sizeof(double*) * trajectory_size);
+    rx = realloc(rx, sizeof(double) * trajectory_size);
+    ry = realloc(ry, sizeof(double) * trajectory_size);
     rx[trajectory_size-1] = xp;
     ry[trajectory_size-1] = yp;
-    VERBOSE_PRINT("Found (%f/%f) as new optimal point\n", xp, yp);
+    VERBOSE_PRINT("Found (%f/%f) as new optimal point at index %d\n", rx[trajectory_size-1], ry[trajectory_size-1], trajectory_size);
 
     // if (oscillations_detection(previous_ids, ix, iy)):
     //     print("Oscillation detected at ({},{})!".format(ix, iy))
@@ -253,19 +180,19 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
 void calc_potential_field(double gx, double gy, double *ox, double *oy, double reso, double rr, double sx, double sy)
 {
 
-  VERBOSE_PRINT("Calculating Potential Map \n");
+  //VERBOSE_PRINT("Calculating Potential Map \n");
 
-  int ox_len = sizeof(ox);
-  int oy_len = sizeof(oy);
+  int ox_len = round(sizeof(ox) / sizeof(ox[0]));
+  int oy_len = round(sizeof(oy) / sizeof(oy[0]));
   // get map contour
-  minx = Min(Min(MinArray(ox, ox_len), sx), gx) - AREA_WIDTH / 2.0;
-  miny = Min(Min(MinArray(oy, oy_len), sy), gy) - AREA_WIDTH / 2.0;
+  potential.minx = Min(Min(MinArray(ox, ox_len), sx), gx) - AREA_WIDTH / 2.0;
+  potential.miny = Min(Min(MinArray(oy, oy_len), sy), gy) - AREA_WIDTH / 2.0;
   double maxx = Max(Max(MaxArray(ox, ox_len), sx), gx) + AREA_WIDTH / 2.0;
   double maxy = Max(Max(MaxArray(oy, oy_len), sy), gy) + AREA_WIDTH / 2.0;
 
   // get step resolution in the map
-  uint32_t xw = round((maxx - minx) / reso);
-  uint32_t yw = round((maxy - miny) / reso);
+  uint32_t xw = round((maxx - potential.minx) / reso);
+  uint32_t yw = round((maxy - potential.miny) / reso);
 
   // build an array representring the map
   double **pmap = malloc(sizeof(double*) * xw);
@@ -276,10 +203,10 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
 
   // populate map with values regarding potential
   for (uint32_t ix = 0; ix < xw; ix++) {
-    double x = ix * reso + minx;
+    double x = ix * reso + potential.minx;
 
     for (uint32_t iy = 0; iy < yw; iy++) {
-      double y = iy * reso + miny;
+      double y = iy * reso + potential.miny;
       double ug = calc_attractive_potential(x, y, gx, gy);
       double uo = calc_repulsive_potential(x, y, ox, oy, rr);
       double uf = ug + uo;
@@ -291,8 +218,6 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
   potential.pmap = pmap;
   potential.size_x = xw;
   potential.size_y = yw;
-  potential.minx = minx;
-  potential.miny = miny;
 
 }
 
@@ -365,5 +290,29 @@ double oscillations_detection(double previous_ids, double ix, double iy) {
   //         previous_ids_set.add(index)
   // return 0
   return 0;
+}
+
+/*
+ * Helper 1: estimate max value in the array
+ */
+int MaxArray(double *array, int n) 
+{ 
+    int mx = 0; 
+    for (int i = 0; i < n-1; i++) { 
+        int temp = array[i];
+        mx = Max(mx, temp); 
+    } 
+    return mx; 
+}
+
+// Helper 2: estimate min value in the array
+int MinArray(double *array, int n) 
+{ 
+    int mx = 10e5; 
+    for (int i = 0; i < n-1; i++) { 
+        int temp = array[i];
+        mx = Min(mx, temp); 
+    } 
+    return mx; 
 }
 

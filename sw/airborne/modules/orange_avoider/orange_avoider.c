@@ -27,16 +27,13 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-
 #define NAV_C // needed to get the nav functions like Inside...
 #include "generated/flight_plan.h"
 
 #define ORANGE_AVOIDER_VERBOSE TRUE
 
-
+// Local constants
 #define OUTER_TRAJECTORY_LENGTH 3
-#define INNER_TRAJECTORY_LENGTH 5
-#define OBSTACLES_IN_MAP 3
 
 #define PRINT(string,...) fprintf(stderr, "[orange_avoider->%s()] " string,__FUNCTION__ , ##__VA_ARGS__)
 #if ORANGE_AVOIDER_VERBOSE
@@ -45,6 +42,7 @@
 #define VERBOSE_PRINT(...)
 #endif
 
+// Declare functions used in the code
 static uint8_t moveWaypointForward(uint8_t waypoint, float distanceMeters);
 static uint8_t calculateForwards(struct EnuCoor_i *new_coor, float distanceMeters);
 static uint8_t moveWaypoint(uint8_t waypoint, struct EnuCoor_i *new_coor);
@@ -52,9 +50,11 @@ static uint8_t increase_nav_heading(float incrementDegrees);
 static uint8_t chooseRandomIncrementAvoidance(void);
 static uint8_t buildTrajectory(void);
 static uint8_t buildInnerTrajectory(uint8_t currentOuterTrajIndex);
+static uint8_t setInnerTrajectory(uint8_t subindex);
 static uint8_t moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint, uint8_t trajectory_length);
 static double checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target, double mseVar);
 
+// Build navigation state map
 enum navigation_state_t {
   SAFE,
   OBSTACLE_FOUND,
@@ -62,36 +62,29 @@ enum navigation_state_t {
   OUT_OF_BOUNDS
 };
 
-// obstacle struct used for obstacle classification
-struct Obstacle {
-  struct EnuCoor_i loc;
-  double width;
-  double heading;
-  double depth;
-};
-
-// define settings
+// define additional settings
 float oa_color_count_frac = 0.18f;
 
 // define and initialise global variables
 enum navigation_state_t navigation_state = SEARCH_FOR_SAFE_HEADING;
-int32_t color_count = 0;                // orange color count from color filter for obstacle detection
-int16_t obstacle_free_confidence = 0;   // a measure of how certain we are that the way ahead is safe.
-float heading_increment = 5.f;          // heading angle increment [deg]
-float maxDistance = .75;               // max waypoint displacement [m]
-uint8_t current_waypoint_outer = 0;     // index of the outer waypoint the drone is going to
-uint8_t current_waypoint_inner = 0;     // index of the inner waypoint the drone is going to
+int32_t color_count = 0;                                                  // orange color count from color filter for obstacle detection
+int16_t obstacle_free_confidence = 0;                                     // a measure of how certain we are that the way ahead is safe.
+float heading_increment = 5.f;                                            // heading angle increment [deg]
+float maxDistance = .75;                                                  // max waypoint displacement [m]
+uint8_t current_waypoint_outer = 0;                                       // index of the outer waypoint the drone is going to
+uint8_t current_waypoint_inner = 0;                                       // index of the inner waypoint the drone is going to
 uint8_t current_waypoint_inner_glob = 0; 
-double mse_outer = 10;                  // mean squared error to check if we reached the outer target waypoint
-double mse_inner = 10;                  // mean squared error to check if we reached the inner target waypoint
+double mse_outer;                                                         // mean squared error to check if we reached the outer target waypoint
+double mse_inner;                                                         // mean squared error to check if we reached the inner target waypoint
+bool trajectory_creation_complete = false;                                // check is trajectory is created
+const int16_t max_trajectory_confidence = 5;                              // number of consecutive negative object detections to be sure we are obstacle free
+uint8_t waypoint_index = 0;                                               // indicates which one of the subtrajectories we are at the moment
 
-struct EnuCoor_i outer_trajectory[OUTER_TRAJECTORY_LENGTH];
-struct EnuCoor_i inner_trajectory[INNER_TRAJECTORY_LENGTH];
-struct EnuCoor_i inner_trajectory_total[INNER_TRAJECTORY_LENGTH*OUTER_TRAJECTORY_LENGTH]; 
-bool trajectory_creation_complete = false; 
-struct Obstacle obstacle_map[OBSTACLES_IN_MAP];
-
-const int16_t max_trajectory_confidence = 5; // number of consecutive negative object detections to be sure we are obstacle free
+// build variables for trajectories
+struct EnuCoor_i *outer_trajectory;
+struct EnuCoor_i *inner_trajectory;
+struct EnuCoor_i *inner_trajectory_total; 
+struct Obstacle *obstacle_map;
 
 /*
  * This next section defines an ABI messaging event (http://wiki.paparazziuav.org/wiki/ABI), necessary
@@ -121,20 +114,35 @@ void orange_avoider_init(void)
   srand(time(NULL));
   chooseRandomIncrementAvoidance();
 
-  // set up trajectory
+  // Build arrays (trajectory and obstacle) with initial memory alloaction
+  outer_trajectory = malloc(sizeof(struct EnuCoor_i) * OUTER_TRAJECTORY_LENGTH);
+  inner_trajectory = malloc(sizeof(struct EnuCoor_i) * INNER_TRAJECTORY_LENGTH);
+  inner_trajectory_total = malloc(sizeof(struct EnuCoor_i) * (INNER_TRAJECTORY_LENGTH*OUTER_TRAJECTORY_LENGTH));
+  obstacle_map = malloc(sizeof(struct Obstacle) * OBSTACLES_IN_MAP);
+
+  // Build trajectory based on few sparse waypoints
   buildTrajectory();
-  for(int i=0; i<= OUTER_TRAJECTORY_LENGTH-1; i++)
+
+  // For each straight line build an inner trajectory that can be modified
+  for(int i=0; i <= OUTER_TRAJECTORY_LENGTH-1; i++)
   {
     buildInnerTrajectory(i);
   }
 
+  // Kickstart required
   waypoint_move_xy_i(WP_NEXT_SUBTARGET, inner_trajectory_total[0].x, inner_trajectory_total[0].y);
-  current_waypoint_inner+= 1; 
-  current_waypoint_outer += 1; 
-  VERBOSE_PRINT("First element subtrajectory: (%f/%f) \n", POS_FLOAT_OF_BFP(inner_trajectory_total[0].x), POS_FLOAT_OF_BFP(inner_trajectory_total[0].y));
+  current_waypoint_inner += 1; 
+  current_waypoint_outer += 1;
 
-  // test: I feed a known obstacle map + the current trajectory sub. The trajectory should get updated. 
-  optimize_trajectory(obstacle_map, inner_trajectory);
+  // add random obstacle 
+  obstacle_map[0].loc.x = POS_BFP_OF_REAL(1.5);
+  obstacle_map[0].loc.y = POS_BFP_OF_REAL(1.5);
+
+  // set the inner trajectory to use
+  setInnerTrajectory(waypoint_index);
+
+  // Starting subtrajectory gets modified based on the presence of obstacles in the map
+  inner_trajectory = optimize_trajectory(obstacle_map, inner_trajectory);
 
   // bind our colorfilter callbacks to receive the color filter outputs
   AbiBindMsgVISUAL_DETECTION(ORANGE_AVOIDER_VISUAL_DETECTION_ID, &color_detection_ev, color_detection_cb);
@@ -175,23 +183,26 @@ void orange_avoider_periodic(void)
       mse_inner = checkWaypointArrival(WP_GOAL, WP_NEXT_SUBTARGET, mse_inner);   // Calculate how close it is from the next inner waypoint
       if (!InsideObstacleZone(WaypointX(WP_TRAJECTORY),WaypointY(WP_TRAJECTORY))){
         navigation_state = OUT_OF_BOUNDS;
-        VERBOSE_PRINT("I am in navigation state out of bounds\n");
+        //VERBOSE_PRINT("I am in navigation state out of bounds\n");
       } else if (obstacle_free_confidence == 0){
         navigation_state = OBSTACLE_FOUND;
-        VERBOSE_PRINT("I am in else if obstacle free confidence\n");
+        //VERBOSE_PRINT("I am in else if obstacle free confidence\n");
       // Reaches outer waypoint
       } else if (mse_outer < 0.15){
-        VERBOSE_PRINT("I am in else if mse outer\n"); 
         // Moves to the next waypoint in the outer trajectory list
         current_waypoint_outer = moveWaypointNext(WP_NEXT_TARGET, outer_trajectory, current_waypoint_outer, OUTER_TRAJECTORY_LENGTH);
+        waypoint_index += 1;
+        VERBOSE_PRINT("We are looking at trajectory %c\n", waypoint_index); 
+        setInnerTrajectory(waypoint_index);
+
         //buildInnerTrajectory(WP_GOAL, WP_NEXT_TARGET);
 
       // Reaches inner waypoint
       } else if (mse_inner < 0.15){
-        VERBOSE_PRINT("I am in else if mse inner\n"); 
+        //VERBOSE_PRINT("I am in else if mse inner\n"); 
         current_waypoint_inner_glob = moveWaypointNext(WP_NEXT_SUBTARGET, inner_trajectory_total, current_waypoint_inner_glob, INNER_TRAJECTORY_LENGTH*OUTER_TRAJECTORY_LENGTH);
       } else {
-        VERBOSE_PRINT("I am in else\n"); 
+        //VERBOSE_PRINT("I am in else\n"); 
         NavGotoWaypointHeading(WP_NEXT_SUBTARGET);
         //NavGotoWaypoint(WP_NEXT_SUBTARGET);
         moveWaypointForward(WP_GOAL, moveDistance);
@@ -331,6 +342,14 @@ uint8_t buildInnerTrajectory(uint8_t currentOuterTrajIndex){
 
 
   return false; 
+}
+
+uint8_t setInnerTrajectory(uint8_t subindex) {
+  for (int i = 0; i < INNER_TRAJECTORY_LENGTH; i++) {
+    inner_trajectory[i].x = inner_trajectory_total[INNER_TRAJECTORY_LENGTH*subindex + i].x;
+    inner_trajectory[i].y = inner_trajectory_total[INNER_TRAJECTORY_LENGTH*subindex + i].y;
+  }
+  return true;
 }
 
 /*
