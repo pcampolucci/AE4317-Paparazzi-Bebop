@@ -18,6 +18,7 @@
  */
 
 #include "modules/orange_avoider/orange_avoider.h"
+#include "modules/orange_avoider/trajectory_optimizer.h"
 #include "firmwares/rotorcraft/navigation.h"
 #include "generated/airframe.h"
 #include "state.h"
@@ -32,8 +33,10 @@
 
 #define ORANGE_AVOIDER_VERBOSE TRUE
 
-#define OUTER_TRAJECTORY_LENGTH 4
-#define INNER_TRAJECTORY_LENGTH 4
+
+#define OUTER_TRAJECTORY_LENGTH 3
+#define INNER_TRAJECTORY_LENGTH 5
+#define OBSTACLES_IN_MAP 3
 
 #define PRINT(string,...) fprintf(stderr, "[orange_avoider->%s()] " string,__FUNCTION__ , ##__VA_ARGS__)
 #if ORANGE_AVOIDER_VERBOSE
@@ -59,6 +62,14 @@ enum navigation_state_t {
   OUT_OF_BOUNDS
 };
 
+// obstacle struct used for obstacle classification
+struct Obstacle {
+  struct EnuCoor_i loc;
+  double width;
+  double heading;
+  double depth;
+};
+
 // define settings
 float oa_color_count_frac = 0.18f;
 
@@ -77,8 +88,8 @@ double mse_inner = 10;                  // mean squared error to check if we rea
 struct EnuCoor_i outer_trajectory[OUTER_TRAJECTORY_LENGTH];
 struct EnuCoor_i inner_trajectory[INNER_TRAJECTORY_LENGTH];
 struct EnuCoor_i inner_trajectory_total[INNER_TRAJECTORY_LENGTH*OUTER_TRAJECTORY_LENGTH]; 
-
 bool trajectory_creation_complete = false; 
+struct Obstacle obstacle_map[OBSTACLES_IN_MAP];
 
 const int16_t max_trajectory_confidence = 5; // number of consecutive negative object detections to be sure we are obstacle free
 
@@ -122,6 +133,8 @@ void orange_avoider_init(void)
   current_waypoint_outer += 1; 
   VERBOSE_PRINT("First element subtrajectory: (%f/%f) \n", POS_FLOAT_OF_BFP(inner_trajectory_total[0].x), POS_FLOAT_OF_BFP(inner_trajectory_total[0].y));
 
+  // test: I feed a known obstacle map + the current trajectory sub. The trajectory should get updated. 
+  optimize_trajectory(obstacle_map, inner_trajectory);
 
   // bind our colorfilter callbacks to receive the color filter outputs
   AbiBindMsgVISUAL_DETECTION(ORANGE_AVOIDER_VISUAL_DETECTION_ID, &color_detection_ev, color_detection_cb);
@@ -325,12 +338,16 @@ uint8_t buildInnerTrajectory(uint8_t currentOuterTrajIndex){
  */
 uint8_t buildTrajectory(void) {
   /*
+  double rx_list[3] = {1, -1, -1};
+  double ry_list[3] = {1, 1, -1};
   for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++) {
       // deviate from centroid of the cyberzoo by a bit
-      double r_x = (rand() % 500) - 200;
-      double r_y = (rand() % 500) - 200;
-      outer_trajectory[i].x = POS_BFP_OF_REAL(r_x/100);
-      outer_trajectory[i].y = POS_BFP_OF_REAL(r_y/100);
+      // double r_x = (rand() % 500) - 200;
+      // double r_y = (rand() % 500) - 200;
+      // outer_trajectory[i].x = POS_BFP_OF_REAL(r_x/100);
+      // outer_trajectory[i].y = POS_BFP_OF_REAL(r_y/100);
+      outer_trajectory[i].x = POS_BFP_OF_REAL(rx_list[i]);
+      outer_trajectory[i].y = POS_BFP_OF_REAL(ry_list[i]);
       VERBOSE_PRINT("Trajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(outer_trajectory[i].x), POS_FLOAT_OF_BFP(outer_trajectory[i].y));
   }
   */
@@ -359,6 +376,7 @@ uint8_t buildTrajectory(void) {
  */
 uint8_t moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint, uint8_t trajectory_length)
 {
+  VERBOSE_PRINT("index_current_waypoint is %d \n", index_current_waypoint);
   VERBOSE_PRINT("Setting new Waypoint: (%f/%f) \n", POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].x), POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].y));
   
   moveWaypoint(waypoint, &trajectory[index_current_waypoint]);
