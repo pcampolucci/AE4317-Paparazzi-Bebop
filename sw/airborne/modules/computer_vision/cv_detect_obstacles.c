@@ -88,14 +88,15 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
                               uint8_t cr_min, uint8_t cr_max)
 {
   uint32_t cnt = 0;
-  char masked_frame[img->h*img->w];
+  int len = img->h*img->w;
+  int masked_frame[len] ;
   uint32_t tot_x = 0;
   uint32_t tot_y = 0;
   uint8_t *buffer = img->buf;
 
   // Go through all the pixels
   for (uint16_t y = 0; y < img->h; y++) {
-    for (uint16_t x = 0; x < img->w; x ++) {
+    for (uint16_t x = 0; x < img->w; x++) {
       // Check if the color is inside the specified values
       uint8_t *yp, *up, *vp;
       if (x % 2 == 0) {
@@ -127,17 +128,32 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
       //VERBOSE_PRINT("cazzo %s",  masked_frame[y * img->w +x]* );
     }
   }
+  
+  double len2 = img->h*img->w;
+  int summy = 0;
+  VERBOSE_PRINT("summy = %d\n",summy);
+  VERBOSE_PRINT("summy = %zu\n",cnt);
+  for (int i = 0; i < len; i++) {
+    //printf("%s", masked_frame[i]);
+    //VERBOSE_PRINT("%d", masked_frame[i]);
+    //VERBOSE_PRINT("culo\n");
+    summy += masked_frame[i];
+  }
+  VERBOSE_PRINT("%d/%d/%d", masked_frame[0], masked_frame[7], masked_frame[100]);
+  double percentage;
+  //percentage = 100.0*summy/len;
+  percentage = 100.0*cnt/len;
+  VERBOSE_PRINT("summy = %d\n",summy);
+  VERBOSE_PRINT("len = %d\n",len);
+  VERBOSE_PRINT("len2 = %f\n",len2);
+  VERBOSE_PRINT("Positive mask = %f \n", percentage);
   //printf("%s\n ",masked_frame);
   //fflush(stdout); 
   VERBOSE_PRINT("MASK HAS BEEN CALCULATED!\n");
   return masked_frame;
 }
 
-//for (uint16_t i = 0; i < img->h*img->w; i++) {
-//printf("%s", masked_frame[i]);
-//VERBOSE_PRINT("%s", masked_frame[i]);
-//VERBOSE_PRINT("culo");
-//}
+
 
 void obstacle_detector_init(void)
 {
