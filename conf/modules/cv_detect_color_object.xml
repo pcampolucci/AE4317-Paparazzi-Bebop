@@ -4,7 +4,7 @@
   <doc>
     <description>Color Object Detector
     Detects an object by a continuous color. Optionally draws on image.
-    
+
     </description>
     <define name="COLOR_OBJECT_DETECTOR_CAMERA1" value="front_camera|bottom_camera" description="Video device to use"/>
     <define name="COLOR_OBJECT_DETECTOR_FPS1" value="0" description="Desired FPS (0: camera rate)"/>
