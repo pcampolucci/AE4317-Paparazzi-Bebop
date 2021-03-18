@@ -44,7 +44,7 @@ struct PotentialMap potential;
  * Do the actual magic
  */
 struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory) {
-  VERBOSE_PRINT("Trajectory Optimisation Started \n");
+  VERBOSE_PRINT("[OPTIMIZER] Trajectory Optimisation Started \n");
 
   // setup initial conditions required for the optimisation
   double sx = POS_FLOAT_OF_BFP(start_trajectory[0].x);                        // starting point in x [m]
@@ -59,29 +59,30 @@ struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuC
   for (int i = 0; i < OBSTACLES_IN_MAP; i++) {
     ox[i] = POS_FLOAT_OF_BFP(obstacle_map[i].loc.x);
     oy[i] = POS_FLOAT_OF_BFP(obstacle_map[i].loc.y);
-    VERBOSE_PRINT("Obstacle in Map (%f/%f)\n", ox[i], oy[i]);
+    VERBOSE_PRINT("[OPTIMIZER] Obstacle in Map (%f/%f)\n", ox[i], oy[i]);
   }
 
-  VERBOSE_PRINT("Received Trajectory of length: %d\n", INNER_TRAJECTORY_LENGTH);
-  VERBOSE_PRINT("Initial Trajectory of length: %d\n", resulting_trajectory.size);
-  VERBOSE_PRINT("Sending (%f/%f) as starting point\n", sx, sy);
-  VERBOSE_PRINT("Sending (%f/%f) as goal point\n", gx, gy);
+  VERBOSE_PRINT("[OPTIMIZER] Received Trajectory of length: %d\n", INNER_TRAJECTORY_LENGTH);
+  VERBOSE_PRINT("[OPTIMIZER] Initial Trajectory of length: %d\n", resulting_trajectory.size);
+  VERBOSE_PRINT("[OPTIMIZER] Sending (%f/%f) as starting point\n", sx, sy);
+  VERBOSE_PRINT("[OPTIMIZER] Sending (%f/%f) as goal point\n", gx, gy);
   // VERBOSE_PRINT("Sending (%f) as grid size\n", grid_size);
   // VERBOSE_PRINT("Sending (%f) as drone radius\n", robot_radius);
 
   // run the optimisation and return a new Trajectory
   potential_field_planning(sx, sy, gx, gy, ox, oy, GRID_SIZE, DRONE_RADIUS);
 
-  VERBOSE_PRINT("Post Computed Trajectory of length: %d\n", resulting_trajectory.size);
+  VERBOSE_PRINT("[OPTIMIZER] Post Computed Trajectory of length: %d\n", resulting_trajectory.size);
 
   // once this is done rx and ry should be ready to be sent to the Trajectory
   // first we reallocate once the Trajectory to the new length
-  start_trajectory = realloc(start_trajectory, sizeof(struct EnuCoor_i) * resulting_trajectory.size);
+  start_trajectory = malloc(sizeof(struct EnuCoor_i) * resulting_trajectory.size);
 
   // then we go through the whole new Trajectory to assign the new values
   for (int i = 0; i < resulting_trajectory.size; i++) {
     start_trajectory[i].x = POS_BFP_OF_REAL(resulting_trajectory.x[i]);
     start_trajectory[i].y = POS_BFP_OF_REAL(resulting_trajectory.y[i]);
+    VERBOSE_PRINT("[OPTIMIZER] Adding point %f/%f\n", POS_FLOAT_OF_BFP(start_trajectory[i].x), POS_FLOAT_OF_BFP(start_trajectory[i].y));
   }
 
   return start_trajectory;
@@ -160,7 +161,7 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
     ry = realloc(ry, sizeof(double) * trajectory_size);
     rx[trajectory_size-1] = xp;
     ry[trajectory_size-1] = yp;
-    VERBOSE_PRINT("Found (%f/%f) as new optimal point at index %d\n", rx[trajectory_size-1], ry[trajectory_size-1], trajectory_size);
+    // VERBOSE_PRINT("Found (%f/%f) as new optimal point at index %d\n", rx[trajectory_size-1], ry[trajectory_size-1], trajectory_size);
 
     // if (oscillations_detection(previous_ids, ix, iy)):
     //     print("Oscillation detected at ({},{})!".format(ix, iy))

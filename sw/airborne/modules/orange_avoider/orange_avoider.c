@@ -33,7 +33,7 @@
 #define ORANGE_AVOIDER_VERBOSE TRUE
 
 // Local constants
-#define OUTER_TRAJECTORY_LENGTH 3
+#define OUTER_TRAJECTORY_LENGTH 5
 
 #define PRINT(string,...) fprintf(stderr, "[orange_avoider->%s()] " string,__FUNCTION__ , ##__VA_ARGS__)
 #if ORANGE_AVOIDER_VERBOSE
@@ -50,9 +50,9 @@ static uint8_t increase_nav_heading(float incrementDegrees);
 static uint8_t chooseRandomIncrementAvoidance(void);
 static uint8_t buildTrajectory(void);
 static uint8_t buildInnerTrajectory(uint8_t currentOuterTrajIndex);
-static uint8_t setInnerTrajectory(uint8_t subindex);
-static uint8_t moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint, uint8_t trajectory_length);
-static double checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target, double mseVar);
+// static uint8_t setInnerTrajectory(uint8_t subindex);
+static uint8_t moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint);
+static double checkWaypointArrival(uint8_t waypoint_target, double mseVar);
 
 // Build navigation state map
 enum navigation_state_t {
@@ -79,11 +79,12 @@ double mse_inner;                                                         // mea
 bool trajectory_creation_complete = false;                                // check is trajectory is created
 const int16_t max_trajectory_confidence = 5;                              // number of consecutive negative object detections to be sure we are obstacle free
 uint8_t waypoint_index = 0;                                               // indicates which one of the subtrajectories we are at the moment
+uint8_t inner_index = 0;
 
 // build variables for trajectories
 struct EnuCoor_i *outer_trajectory;
 struct EnuCoor_i *inner_trajectory;
-struct EnuCoor_i *inner_trajectory_total; 
+struct TrajectoryList *inner_trajectory_total; 
 struct Obstacle *obstacle_map;
 
 /*
@@ -117,32 +118,44 @@ void orange_avoider_init(void)
   // Build arrays (trajectory and obstacle) with initial memory alloaction
   outer_trajectory = malloc(sizeof(struct EnuCoor_i) * OUTER_TRAJECTORY_LENGTH);
   inner_trajectory = malloc(sizeof(struct EnuCoor_i) * INNER_TRAJECTORY_LENGTH);
-  inner_trajectory_total = malloc(sizeof(struct EnuCoor_i) * (INNER_TRAJECTORY_LENGTH*OUTER_TRAJECTORY_LENGTH));
   obstacle_map = malloc(sizeof(struct Obstacle) * OBSTACLES_IN_MAP);
+
+  inner_trajectory_total = malloc(sizeof(struct TrajectoryList) * OUTER_TRAJECTORY_LENGTH);
+
+  // allocate memory in trajectory list for subtrajectories
+  for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++) {
+    inner_trajectory_total[i].inner_trajectory = malloc(sizeof(struct EnuCoor_i) * INNER_TRAJECTORY_LENGTH);
+  }
 
   // Build trajectory based on few sparse waypoints
   buildTrajectory();
 
   // For each straight line build an inner trajectory that can be modified
-  for(int i=0; i <= OUTER_TRAJECTORY_LENGTH-1; i++)
+  for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++)
   {
     buildInnerTrajectory(i);
   }
 
   // Kickstart required
-  waypoint_move_xy_i(WP_NEXT_SUBTARGET, inner_trajectory_total[0].x, inner_trajectory_total[0].y);
-  current_waypoint_inner += 1; 
-  current_waypoint_outer += 1;
+  waypoint_move_xy_i(WP_INNER, inner_trajectory_total[0].inner_trajectory[0].x, inner_trajectory_total[0].inner_trajectory[0].y);
 
   // add random obstacle 
   obstacle_map[0].loc.x = POS_BFP_OF_REAL(1.5);
   obstacle_map[0].loc.y = POS_BFP_OF_REAL(1.5);
 
-  // set the inner trajectory to use
-  setInnerTrajectory(waypoint_index);
-
   // Starting subtrajectory gets modified based on the presence of obstacles in the map
-  inner_trajectory = optimize_trajectory(obstacle_map, inner_trajectory);
+  struct EnuCoor_i *new_inner = optimize_trajectory(obstacle_map, inner_trajectory_total[waypoint_index].inner_trajectory);
+  int len_inner_traj = sizeof(new_inner) / sizeof(new_inner[0]);
+  inner_trajectory_total[0].inner_trajectory = realloc(inner_trajectory_total[0].inner_trajectory, sizeof(struct EnuCoor_i) * len_inner_traj);
+  for (int i = 0; i < len_inner_traj; i++) {
+    inner_trajectory_total[0].inner_trajectory[i].x = new_inner[i].x;
+    inner_trajectory_total[0].inner_trajectory[i].y = new_inner[i].y;
+  }
+  VERBOSE_PRINT("Check at index %d is (%f/%f) \n", 0, POS_FLOAT_OF_BFP(inner_trajectory_total[0].inner_trajectory[0].x), POS_FLOAT_OF_BFP(inner_trajectory_total[0].inner_trajectory[0].y));
+  VERBOSE_PRINT("Check at index %d is (%f/%f) \n", 0, POS_FLOAT_OF_BFP(inner_trajectory_total[0].inner_trajectory[1].x), POS_FLOAT_OF_BFP(inner_trajectory_total[0].inner_trajectory[1].y));
+  VERBOSE_PRINT("Check at index %d is (%f/%f) \n", 0, POS_FLOAT_OF_BFP(inner_trajectory_total[0].inner_trajectory[2].x), POS_FLOAT_OF_BFP(inner_trajectory_total[0].inner_trajectory[2].y));
+  VERBOSE_PRINT("Check at index %d is (%f/%f) \n", 0, POS_FLOAT_OF_BFP(inner_trajectory_total[0].inner_trajectory[3].x), POS_FLOAT_OF_BFP(inner_trajectory_total[0].inner_trajectory[3].y));
+  VERBOSE_PRINT("Check at index %d is (%f/%f) \n", 0, POS_FLOAT_OF_BFP(inner_trajectory_total[0].inner_trajectory[4].x), POS_FLOAT_OF_BFP(inner_trajectory_total[0].inner_trajectory[4].y));
 
   // bind our colorfilter callbacks to receive the color filter outputs
   AbiBindMsgVISUAL_DETECTION(ORANGE_AVOIDER_VISUAL_DETECTION_ID, &color_detection_ev, color_detection_cb);
@@ -161,8 +174,6 @@ void orange_avoider_periodic(void)
   // compute current color thresholds
   int32_t color_count_threshold = oa_color_count_frac * front_camera.output_size.w * front_camera.output_size.h;
 
-  //VERBOSE_PRINT("Color_count: %d  threshold: %d state: %d \n", color_count, color_count_threshold, navigation_state);
-
   // update our safe confidence using color threshold
   if(color_count < color_count_threshold){
     obstacle_free_confidence++;
@@ -176,51 +187,67 @@ void orange_avoider_periodic(void)
   float moveDistance = fminf(maxDistance, 0.2f * obstacle_free_confidence);
 
   switch (navigation_state){
+
     case SAFE:
+
       // Move waypoint forward
-      moveWaypointForward(WP_TRAJECTORY, 1.5f * moveDistance);    // Checks 1.5m in front if it reaches the bounds
-      mse_outer = checkWaypointArrival(WP_GOAL, WP_NEXT_TARGET, mse_outer);   // Calculate how close it is from the next outer waypoint
-      mse_inner = checkWaypointArrival(WP_GOAL, WP_NEXT_SUBTARGET, mse_inner);   // Calculate how close it is from the next inner waypoint
+      moveWaypointForward(WP_TRAJECTORY, 1.5f * moveDistance);                      // Checks 1.5m in front if it reaches the bounds
+
+      // Set indicator to see how close we are
+      mse_outer = checkWaypointArrival(WP_OUTER, mse_outer);      // Calculate how close it is from the next outer waypoint
+      mse_inner = checkWaypointArrival(WP_INNER, mse_inner);      // Calculate how close it is from the next inner waypoint
+      
       if (!InsideObstacleZone(WaypointX(WP_TRAJECTORY),WaypointY(WP_TRAJECTORY))){
+
         navigation_state = OUT_OF_BOUNDS;
         //VERBOSE_PRINT("I am in navigation state out of bounds\n");
+
       } else if (obstacle_free_confidence == 0){
+
         navigation_state = OBSTACLE_FOUND;
         //VERBOSE_PRINT("I am in else if obstacle free confidence\n");
+
       // Reaches outer waypoint
       } else if (mse_outer < 0.15){
-        // Moves to the next waypoint in the outer trajectory list
-        current_waypoint_outer = moveWaypointNext(WP_NEXT_TARGET, outer_trajectory, current_waypoint_outer, OUTER_TRAJECTORY_LENGTH);
-        waypoint_index += 1;
-        VERBOSE_PRINT("We are looking at trajectory %c\n", waypoint_index); 
-        setInnerTrajectory(waypoint_index);
 
-        //buildInnerTrajectory(WP_GOAL, WP_NEXT_TARGET);
+        // Moves to the next waypoint in the outer trajectory list
+        if (waypoint_index == OUTER_TRAJECTORY_LENGTH-1) {
+          waypoint_index = 0;
+        } else {
+          waypoint_index += 1;
+        }
+        inner_index = 0;
+        VERBOSE_PRINT("[OUTER TRAJECTORY] Setting new Waypoint at %d, going to : (%f/%f) \n", \
+        waypoint_index, \
+        POS_FLOAT_OF_BFP(outer_trajectory[waypoint_index].x), \
+        POS_FLOAT_OF_BFP(outer_trajectory[waypoint_index].y));
+        current_waypoint_outer = moveWaypointNext(WP_OUTER, outer_trajectory, waypoint_index);
 
       // Reaches inner waypoint
       } else if (mse_inner < 0.15){
-        //VERBOSE_PRINT("I am in else if mse inner\n"); 
-        current_waypoint_inner_glob = moveWaypointNext(WP_NEXT_SUBTARGET, inner_trajectory_total, current_waypoint_inner_glob, INNER_TRAJECTORY_LENGTH*OUTER_TRAJECTORY_LENGTH);
+
+        VERBOSE_PRINT("[INNER TRAJECTORY] Setting new Waypoint at %d, going to : (%f/%f) \n", \
+        inner_index, \
+        POS_FLOAT_OF_BFP(inner_trajectory_total[waypoint_index-1].inner_trajectory[inner_index].x), \
+        POS_FLOAT_OF_BFP(inner_trajectory_total[waypoint_index-1].inner_trajectory[inner_index].y));
+ 
+        current_waypoint_inner_glob = moveWaypointNext(WP_INNER, inner_trajectory_total[waypoint_index-1].inner_trajectory, inner_index);
+        if (inner_index < INNER_TRAJECTORY_LENGTH - 1) {
+          inner_index += 1;
+        }
+
       } else {
+
         //VERBOSE_PRINT("I am in else\n"); 
-        NavGotoWaypointHeading(WP_NEXT_SUBTARGET);
-        //NavGotoWaypoint(WP_NEXT_SUBTARGET);
+        NavGotoWaypointHeading(WP_INNER);
         moveWaypointForward(WP_GOAL, moveDistance);
+
       }
 
       break;
-    case OBSTACLE_FOUND:
-      // stop
-      waypoint_move_here_2d(WP_GOAL);
-      waypoint_move_here_2d(WP_TRAJECTORY);
 
-      // randomly select new search direction
-      chooseRandomIncrementAvoidance();
-
-      navigation_state = SEARCH_FOR_SAFE_HEADING;
-
-      break;
     case SEARCH_FOR_SAFE_HEADING:
+
       increase_nav_heading(heading_increment);
 
       // make sure we have a couple of good readings before declaring the way safe
@@ -228,7 +255,9 @@ void orange_avoider_periodic(void)
         navigation_state = SAFE;
       }
       break;
+
     case OUT_OF_BOUNDS:
+
       increase_nav_heading(heading_increment);
       moveWaypointForward(WP_TRAJECTORY, 1.5f);
 
@@ -243,6 +272,7 @@ void orange_avoider_periodic(void)
         navigation_state = SEARCH_FOR_SAFE_HEADING;
       }
       break;
+
     default:
       break;
   }
@@ -264,6 +294,36 @@ uint8_t increase_nav_heading(float incrementDegrees)
   nav_heading = ANGLE_BFP_OF_REAL(new_heading);
 
   //VERBOSE_PRINT("Increasing heading to %f\n", DegOfRad(new_heading));
+  return false;
+}
+
+/*
+ * Calculates coordinates of distance forward and sets waypoint 'waypoint' to those coordinates
+ */
+uint8_t moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint)
+{ 
+  // VERBOSE_PRINT("moving %f/%f at %d\n", POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].x), POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].y), index_current_waypoint);
+  moveWaypoint(waypoint, &trajectory[index_current_waypoint]);
+  return index_current_waypoint;
+}
+
+/*
+ * Checks if WP_GOAL is very close to WP_TARGET, then change the waypoint
+ */
+double checkWaypointArrival(uint8_t waypoint_target, double mseVar)
+{
+  double error_x = GetPosX() - WaypointX(waypoint_target);
+  double error_y = GetPosY() - WaypointY(waypoint_target);
+  mseVar = sqrt(pow(error_x,2)+pow(error_y,2));
+  return mseVar;
+}
+
+/*
+ * Sets waypoint 'waypoint' to the coordinates of 'new_coor'
+ */
+uint8_t moveWaypoint(uint8_t waypoint, struct EnuCoor_i *new_coor)
+{
+  waypoint_move_xy_i(waypoint, new_coor->x, new_coor->y);
   return false;
 }
 
@@ -295,15 +355,6 @@ uint8_t calculateForwards(struct EnuCoor_i *new_coor, float distanceMeters)
 }
 
 /*
- * Sets waypoint 'waypoint' to the coordinates of 'new_coor'
- */
-uint8_t moveWaypoint(uint8_t waypoint, struct EnuCoor_i *new_coor)
-{
-  waypoint_move_xy_i(waypoint, new_coor->x, new_coor->y);
-  return false;
-}
-
-/*
  * Sets the variable 'heading_increment' randomly positive/negative
  */
 uint8_t chooseRandomIncrementAvoidance(void)
@@ -318,106 +369,58 @@ uint8_t chooseRandomIncrementAvoidance(void)
   }
   return false;
 }
-/*
- * Creates an 'inner' trajectory between the trajectory[i] and trajectory[i+1]
- */
-uint8_t buildInnerTrajectory(uint8_t currentOuterTrajIndex){
-  double x_diff = POS_FLOAT_OF_BFP(outer_trajectory[currentOuterTrajIndex+1].x) - POS_FLOAT_OF_BFP(outer_trajectory[currentOuterTrajIndex].x);
-  double y_diff = POS_FLOAT_OF_BFP(outer_trajectory[currentOuterTrajIndex+1].y) - POS_FLOAT_OF_BFP(outer_trajectory[currentOuterTrajIndex].y);
-  float increment_x =  x_diff/(INNER_TRAJECTORY_LENGTH);
-  float increment_y = y_diff/(INNER_TRAJECTORY_LENGTH);
-  for (int i = 0; i < INNER_TRAJECTORY_LENGTH; i++){
-    // Create set of points between current position and the desired waypoint
-    // Currently a straight line
-    inner_trajectory[i].x = POS_BFP_OF_REAL((i+1)*increment_x + POS_FLOAT_OF_BFP(outer_trajectory[currentOuterTrajIndex].x));
-    inner_trajectory[i].y = POS_BFP_OF_REAL((i+1)*increment_y + POS_FLOAT_OF_BFP(outer_trajectory[currentOuterTrajIndex].y));
-    inner_trajectory_total[INNER_TRAJECTORY_LENGTH*currentOuterTrajIndex + i].x = inner_trajectory[i].x;
-    inner_trajectory_total[INNER_TRAJECTORY_LENGTH*currentOuterTrajIndex + i].y = inner_trajectory[i].y;
-
-    //VERBOSE_PRINT("Subtrajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(inner_trajectory[i].x), POS_FLOAT_OF_BFP(inner_trajectory[i].y));
-    VERBOSE_PRINT("Subtrajectory point added to the big list: (%f/%f) \n", POS_FLOAT_OF_BFP(inner_trajectory_total[INNER_TRAJECTORY_LENGTH*currentOuterTrajIndex + i].x), POS_FLOAT_OF_BFP(inner_trajectory_total[INNER_TRAJECTORY_LENGTH*currentOuterTrajIndex + i].y));
-    //VERBOSE_PRINT("THE INDEX IS %i \n", current_waypoint_outer);
-  }
-
-
-
-  return false; 
-}
-
-uint8_t setInnerTrajectory(uint8_t subindex) {
-  for (int i = 0; i < INNER_TRAJECTORY_LENGTH; i++) {
-    inner_trajectory[i].x = inner_trajectory_total[INNER_TRAJECTORY_LENGTH*subindex + i].x;
-    inner_trajectory[i].y = inner_trajectory_total[INNER_TRAJECTORY_LENGTH*subindex + i].y;
-  }
-  return true;
-}
 
 /*
  * Builds the trajectory in the contour by random values
  */
 uint8_t buildTrajectory(void) {
-  /*
-  double rx_list[3] = {1, -1, -1};
-  double ry_list[3] = {1, 1, -1};
+
+  // set outer trajectory points
+  double rx_list[5] = {0, 2, 2, -2, 2};
+  double ry_list[5] = {0, 2, -2, 0, 0};
+
+  // populate outer_tajectory struct
   for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++) {
-      // deviate from centroid of the cyberzoo by a bit
-      // double r_x = (rand() % 500) - 200;
-      // double r_y = (rand() % 500) - 200;
-      // outer_trajectory[i].x = POS_BFP_OF_REAL(r_x/100);
-      // outer_trajectory[i].y = POS_BFP_OF_REAL(r_y/100);
       outer_trajectory[i].x = POS_BFP_OF_REAL(rx_list[i]);
       outer_trajectory[i].y = POS_BFP_OF_REAL(ry_list[i]);
-      VERBOSE_PRINT("Trajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(outer_trajectory[i].x), POS_FLOAT_OF_BFP(outer_trajectory[i].y));
+      VERBOSE_PRINT("[OUTER TRAJECTORY] Point added: (%f/%f) \n", POS_FLOAT_OF_BFP(outer_trajectory[i].x), POS_FLOAT_OF_BFP(outer_trajectory[i].y));
   }
-  */
-  outer_trajectory[0].x = POS_BFP_OF_REAL(0);
-  outer_trajectory[0].y = POS_BFP_OF_REAL(0);
-  VERBOSE_PRINT("Trajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(outer_trajectory[0].x), POS_FLOAT_OF_BFP(outer_trajectory[0].y));
-  outer_trajectory[1].x = POS_BFP_OF_REAL(2);
-  outer_trajectory[1].y = POS_BFP_OF_REAL(2);
-  VERBOSE_PRINT("Trajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(outer_trajectory[1].x), POS_FLOAT_OF_BFP(outer_trajectory[1].y));
-  outer_trajectory[2].x = POS_BFP_OF_REAL(2);
-  outer_trajectory[2].y = POS_BFP_OF_REAL(-2);
-  VERBOSE_PRINT("Trajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(outer_trajectory[2].x), POS_FLOAT_OF_BFP(outer_trajectory[2].y));
-  outer_trajectory[3].x = POS_BFP_OF_REAL(-2);
-  outer_trajectory[3].y = POS_BFP_OF_REAL(0);
-  VERBOSE_PRINT("Trajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(outer_trajectory[3].x), POS_FLOAT_OF_BFP(outer_trajectory[3].y));
-  outer_trajectory[4].x = POS_BFP_OF_REAL(0);
-  outer_trajectory[4].y = POS_BFP_OF_REAL(0);
-  VERBOSE_PRINT("Trajectory point added to list: (%f/%f) \n", POS_FLOAT_OF_BFP(outer_trajectory[4].x), POS_FLOAT_OF_BFP(outer_trajectory[4].y));
 
-  waypoint_move_xy_i(WP_NEXT_TARGET, outer_trajectory[0].x, outer_trajectory[0].y);
+  // set first point for next target
+  waypoint_move_xy_i(WP_OUTER, outer_trajectory[0].x, outer_trajectory[0].y);
   return false;
 }
 
 /*
- * Calculates coordinates of distance forward and sets waypoint 'waypoint' to those coordinates
+ * Creates an 'inner' trajectory between the trajectory[i] and trajectory[i+1]
  */
-uint8_t moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint, uint8_t trajectory_length)
-{
-  VERBOSE_PRINT("index_current_waypoint is %d \n", index_current_waypoint);
-  VERBOSE_PRINT("Setting new Waypoint: (%f/%f) \n", POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].x), POS_FLOAT_OF_BFP(trajectory[index_current_waypoint].y));
-  
-  moveWaypoint(waypoint, &trajectory[index_current_waypoint]);
+uint8_t buildInnerTrajectory(uint8_t outer_index){
 
-  // update the waypoint index
-  if (index_current_waypoint == trajectory_length - 1) {
-    index_current_waypoint = 0;
-  } 
-  else {
-    index_current_waypoint += 1;
+  double x_diff = POS_FLOAT_OF_BFP(outer_trajectory[outer_index+1].x) - POS_FLOAT_OF_BFP(outer_trajectory[outer_index].x);
+  double y_diff = POS_FLOAT_OF_BFP(outer_trajectory[outer_index+1].y) - POS_FLOAT_OF_BFP(outer_trajectory[outer_index].y);
+  float increment_x =  x_diff/(INNER_TRAJECTORY_LENGTH);
+  float increment_y = y_diff/(INNER_TRAJECTORY_LENGTH);
+
+  for (int i = 0; i < INNER_TRAJECTORY_LENGTH; i++){
+
+    // Create set of points between current position and the desired waypoint (initialized as straight line)
+    inner_trajectory_total[outer_index].inner_trajectory[i].x = POS_BFP_OF_REAL((i+1)*increment_x + POS_FLOAT_OF_BFP(outer_trajectory[outer_index].x));
+    inner_trajectory_total[outer_index].inner_trajectory[i].y = POS_BFP_OF_REAL((i+1)*increment_y + POS_FLOAT_OF_BFP(outer_trajectory[outer_index].y));
+
+    VERBOSE_PRINT("[INNER TRAJECTORY] Point added: (%f/%f) \n", POS_FLOAT_OF_BFP(inner_trajectory_total[outer_index].inner_trajectory[i].x), POS_FLOAT_OF_BFP(inner_trajectory_total[outer_index].inner_trajectory[i].y));
   }
-  return index_current_waypoint;
+
+  return false; 
 }
 
 /*
- * Checks if WP_GOAL is very close to WP_TARGET, then change the waypoint
+ * Set Inner Trajectory
  */
-double checkWaypointArrival(uint8_t waypoint_goal, uint8_t waypoint_target, double mseVar)
-{
-  double error_x = WaypointX(waypoint_goal) - WaypointX(waypoint_target);
-  double error_y = WaypointY(waypoint_goal) - WaypointY(waypoint_target);
-  mseVar = sqrt(pow(error_x,2)+pow(error_y,2));
-  //VERBOSE_PRINT("Proximity to target (mse): %f, \n", mseVar);
-  return mseVar;
-}
+// uint8_t setInnerTrajectory(uint8_t subindex) {
+//   for (int i = 0; i < INNER_TRAJECTORY_LENGTH; i++) {
+//     inner_trajectory[i].x = inner_trajectory_total[INNER_TRAJECTORY_LENGTH*subindex + i].x;
+//     inner_trajectory[i].y = inner_trajectory_total[INNER_TRAJECTORY_LENGTH*subindex + i].y;
+//   }
+//   return true;
+// }
+

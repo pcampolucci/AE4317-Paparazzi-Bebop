@@ -17,7 +17,7 @@
 #include "state.h"
 
 // global settings
-#define INNER_TRAJECTORY_LENGTH 2
+#define INNER_TRAJECTORY_LENGTH 5
 #define OBSTACLES_IN_MAP 1
 
 // define struct objects
@@ -50,6 +50,11 @@ struct PotentialMap {
   int size_y;
   double minx;
   double miny;
+};
+
+// trajectory list
+struct TrajectoryList {
+  struct EnuCoor_i *inner_trajectory;
 };
 
 // settings
