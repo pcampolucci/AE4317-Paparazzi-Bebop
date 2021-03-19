@@ -53,6 +53,17 @@ static pthread_mutex_t mutex;
 #define OBSTACLE_DETECTOR_FPS 0 ///< Default FPS (zero means run at camera fps)
 #endif
 
+// Filter Settings
+
+uint8_t cod_lum_min = 0;
+uint8_t cod_lum_max = 0;
+uint8_t cod_cb_min = 0;
+uint8_t cod_cb_max = 0;
+uint8_t cod_cr_min = 0;
+uint8_t cod_cr_max = 0;
+
+bool cod_draw = false;
+
 // define global variables
 struct color_object_t {
   int32_t x_c;
@@ -62,25 +73,84 @@ struct color_object_t {
 };
 struct color_object_t global_filters[2];
 
-/*
- * object_detector
- * @param img - input image to process
- * @param filter - which detection filter to process
- * @return img
- */
+// Function
+uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
+                              uint8_t lum_min, uint8_t lum_max,
+                              uint8_t cb_min, uint8_t cb_max,
+                              uint8_t cr_min, uint8_t cr_max);
 
 
 
-
-/*
 static struct image_t *object_detector(struct image_t *img)
 {
-  Put mask here
-  
-  VERBOSE_PRINT("Image received!?\n");
+  uint8_t lum_min, lum_max;
+  uint8_t cb_min, cb_max;
+  uint8_t cr_min, cr_max;
+  bool draw;
+  lum_min = cod_lum_min;
+  lum_max = cod_lum_max;
+  cb_min = cod_cb_min;
+  cb_max = cod_cb_max;
+  cr_min = cod_cr_min;
+  cr_max = cod_cr_max;
+  draw = cod_draw;
+  //return img;
+
+
+  int32_t x_c, y_c;
+
+  // Filter and find centroid
+  uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max);
+  // VERBOSE_PRINT("Color count %d: %u, threshold %u, x_c %d, y_c %d\n", camera, object_count, count_threshold, x_c, y_c);
+  // VERBOSE_PRINT("centroid %d: (%d, %d) r: %4.2f a: %4.2f\n", camera, x_c, y_c,
+  //       hypotf(x_c, y_c) / hypotf(img->w * 0.5, img->h * 0.5), RadOfDeg(atan2f(y_c, x_c)));
+
+  pthread_mutex_lock(&mutex);
+  global_filters[0].color_count = count;
+  global_filters[0].x_c = 0 ;//x_c;
+  global_filters[0].y_c = 0 ;//y_c;
+  global_filters[0].updated = true;
+  pthread_mutex_unlock(&mutex);
+
   return img;
 }
-*/
+
+// struct image_t *object_detector1(struct image_t *img);
+// struct image_t *object_detector1(struct image_t *img)
+// {
+//   return object_detector(img);
+// }
+
+//cancelled call for object dector 1 and 2 as we do not have a switch anymore
+
+
+
+
+void obstacle_detector_init(void)
+{
+  memset(global_filters, 0, 2*sizeof(struct color_object_t));
+  pthread_mutex_init(&mutex, NULL);
+  VERBOSE_PRINT("Obstacle detector initialized\n");
+
+  #ifdef OBSTACLE_DETECTOR_CAMERA
+    #ifdef OBSTACLE_DETECTOR_LUM_MIN
+      cod_lum_min = OBSTACLE_DETECTOR_LUM_MIN;
+      cod_lum_max = OBSTACLE_DETECTOR_LUM_MAX;
+      cod_cb_min = OBSTACLE_DETECTOR_CB_MIN;
+      cod_cb_max = OBSTACLE_DETECTOR_CB_MAX;
+      cod_cr_min = OBSTACLE_DETECTOR_CR_MIN;
+      cod_cr_max = OBSTACLE_DETECTOR_CR_MAX;
+    #endif
+    #ifdef OBSTACLE_DETECTOR_DRAW
+      cod_draw = OBSTACLE_DETECTOR_DRAW;
+    #endif
+    //cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, object_detector, OBSTACLE_DETECTOR_FPS);
+    cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, object_detector, OBSTACLE_DETECTOR_FPS);
+  #endif
+}
+
+
+
 
 uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
@@ -125,14 +195,13 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
         
       }
       //fprintf("%s", masked_frame[y * img->w +x]);
-      //VERBOSE_PRINT("cazzo %s",  masked_frame[y * img->w +x]* );
     }
   }
   
   double len2 = img->h*img->w;
   int summy = 0;
   VERBOSE_PRINT("summy = %d\n",summy);
-  VERBOSE_PRINT("summy = %zu\n",cnt);
+  VERBOSE_PRINT("cnt = %d\n",cnt);
   for (int i = 0; i < len; i++) {
     //printf("%s", masked_frame[i]);
     //VERBOSE_PRINT("%d", masked_frame[i]);
@@ -148,24 +217,15 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
   VERBOSE_PRINT("len2 = %f\n",len2);
   VERBOSE_PRINT("Positive mask = %f \n", percentage);
   //printf("%s\n ",masked_frame);
-  //fflush(stdout); 
+  //fflush(stdout);
+  VERBOSE_PRINT("\n"); 
   VERBOSE_PRINT("MASK HAS BEEN CALCULATED!\n");
-  return masked_frame;
+  //return masked_frame;
+  return cnt;
 }
 
 
 
-void obstacle_detector_init(void)
-{
-  memset(global_filters, 0, 2*sizeof(struct color_object_t));
-  pthread_mutex_init(&mutex, NULL);
-  VERBOSE_PRINT("Obstacle detector initialized\n");
-
-  #ifdef OBSTACLE_DETECTOR_CAMERA
-    //cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, object_detector, OBSTACLE_DETECTOR_FPS);
-    cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, mask_it, OBSTACLE_DETECTOR_FPS);
-  #endif
-}
 
 void obstacle_detector_periodic(void)
 {
