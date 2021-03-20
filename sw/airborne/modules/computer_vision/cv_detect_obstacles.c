@@ -104,9 +104,9 @@ static struct image_t *object_detector(struct image_t *img)
   // VERBOSE_PRINT("Color count %d: %u, threshold %u, x_c %d, y_c %d\n", camera, object_count, count_threshold, x_c, y_c);
   // VERBOSE_PRINT("centroid %d: (%d, %d) r: %4.2f a: %4.2f\n", camera, x_c, y_c,
   //       hypotf(x_c, y_c) / hypotf(img->w * 0.5, img->h * 0.5), RadOfDeg(atan2f(y_c, x_c)));
-
+  VERBOSE_PRINT("Test if mask frame works = %d", count );
   pthread_mutex_lock(&mutex);
-  global_filters[0].color_count = count;
+  global_filters[0].color_count =count;
   global_filters[0].x_c = 0 ;//x_c;
   global_filters[0].y_c = 0 ;//y_c;
   global_filters[0].updated = true;
@@ -158,12 +158,15 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
                               uint8_t cr_min, uint8_t cr_max)
 {
   uint32_t cnt = 0;
-  int len = img->h*img->w;
-  int masked_frame[len] ;
+  uint32_t len = img->h*img->w;
+  uint32_t masked_frame[len] ;
   uint32_t tot_x = 0;
   uint32_t tot_y = 0;
   uint8_t *buffer = img->buf;
-
+  int mysize = img->buf_size;//sizeof(img->buf) / sizeof(uint8_t);
+  VERBOSE_PRINT("size of buffer = %d\n",mysize);
+  VERBOSE_PRINT("Image height = %d\n",img->h);
+  VERBOSE_PRINT("Image width = %d\n",img->w);
   // Go through all the pixels
   for (uint16_t y = 0; y < img->h; y++) {
     for (uint16_t x = 0; x < img->w; x++) {
@@ -188,39 +191,47 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
         cnt ++;
         tot_x += x;
         tot_y += y;
-        masked_frame[y * img->w +x] = 1;
+        int idx = y * img->w +x;
+        masked_frame[idx] = 1;
         if (draw){
           *yp = 255;  // make pixel brighter in image
+          *up = 128;
+          *vp = 128;
         }
-        
+              
+      }else {
+           int idx = y * img->w +x;
+           masked_frame[idx] = 0;
+          if (draw){
+            *yp = 0;
+            *up = 128;
+            *vp = 128;
+          }
       }
       //fprintf("%s", masked_frame[y * img->w +x]);
     }
   }
-  
-  double len2 = img->h*img->w;
-  int summy = 0;
-  VERBOSE_PRINT("summy = %d\n",summy);
+
   VERBOSE_PRINT("cnt = %d\n",cnt);
-  for (int i = 0; i < len; i++) {
-    //printf("%s", masked_frame[i]);
-    //VERBOSE_PRINT("%d", masked_frame[i]);
-    //VERBOSE_PRINT("culo\n");
-    summy += masked_frame[i];
+  uint32_t summy = 0;
+  for (int ica = len-1; ica >= 0; ica--) {
+    summy += masked_frame[ica];
   }
-  VERBOSE_PRINT("%d/%d/%d", masked_frame[0], masked_frame[7], masked_frame[100]);
+  //VERBOSE_PRINT("%d/%d/%d\n", masked_frame[50000], masked_frame[100000], masked_frame[len]);
   double percentage;
+  double percentage2;
   //percentage = 100.0*summy/len;
   percentage = 100.0*cnt/len;
+  percentage2 = 100.0*summy/len;
   VERBOSE_PRINT("summy = %d\n",summy);
   VERBOSE_PRINT("len = %d\n",len);
-  VERBOSE_PRINT("len2 = %f\n",len2);
   VERBOSE_PRINT("Positive mask = %f \n", percentage);
+  VERBOSE_PRINT("Positive mask 2 = %f \n", percentage2);
   //printf("%s\n ",masked_frame);
   //fflush(stdout);
-  VERBOSE_PRINT("\n"); 
   VERBOSE_PRINT("MASK HAS BEEN CALCULATED!\n");
-  //return masked_frame;
+  VERBOSE_PRINT("\n"); 
+  //return *masked_frame;
   return cnt;
 }
 

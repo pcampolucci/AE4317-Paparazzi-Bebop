@@ -78,6 +78,7 @@
     <module name="video_rtp_stream">
       <define name="VIEWVIDEO_CAMERA" value="front_camera"/>
       <define name="VIEWVIDEO_CAMERA2" value="bottom_camera"/>
+      <define name="VIEWVIDEO_CAMERA_M" value="front_camera"/>
       <define name="VIEWVIDEO_DOWNSIZE_FACTOR" value="1"/>
       <define name="VIEWVIDEO_QUALITY_FACTOR" value="40"/>
     </module>
@@ -123,6 +124,7 @@
     <define name="GAIN_RED" value="9.0"/>
     <define name="TARGET_EXPOSURE" value="30" />
   </section>
+
 
   <section name="AIR_DATA" prefix="AIR_DATA_">
     <define name="CALC_AIRSPEED" value="FALSE"/>
