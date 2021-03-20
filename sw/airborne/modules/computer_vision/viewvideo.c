@@ -221,7 +221,7 @@ static struct image_t *viewvideo_function2(struct image_t *img)
 #ifdef VIEWVIDEO_CAMERA_M
 static struct image_t *viewvideo_function_m(struct image_t *img)
 {
-  mask_it(&img,0,0,1,0,255,0,110,0,130);
+  //mask_it(&img,0,0,1,0,255,0,110,0,130);
   static uint16_t rtp_packet_nr = 0;
   static uint32_t rtp_frame_time = 0;
   static struct image_t img_small = {.buf=NULL, .buf_size=0};

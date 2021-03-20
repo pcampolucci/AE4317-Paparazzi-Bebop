@@ -77,7 +77,7 @@ struct color_object_t global_filters[2];
 uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
                               uint8_t cb_min, uint8_t cb_max,
-                              uint8_t cr_min, uint8_t cr_max);
+                              uint8_t cr_min, uint8_t cr_max, uint32_t *masked_frame2);
 
 
 
@@ -99,11 +99,17 @@ static struct image_t *object_detector(struct image_t *img)
 
   int32_t x_c, y_c;
 
+  uint32_t lenn = 240 * 520;
+  uint32_t masked_frame3[lenn] ;
+  memset( masked_frame3, 0, lenn*sizeof(uint32_t) );
+  VERBOSE_PRINT("check me bitch 1= %d\n", masked_frame3[50000]);
+
   // Filter and find centroid
-  uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max);
+  uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame3);
   // VERBOSE_PRINT("Color count %d: %u, threshold %u, x_c %d, y_c %d\n", camera, object_count, count_threshold, x_c, y_c);
   // VERBOSE_PRINT("centroid %d: (%d, %d) r: %4.2f a: %4.2f\n", camera, x_c, y_c,
   //       hypotf(x_c, y_c) / hypotf(img->w * 0.5, img->h * 0.5), RadOfDeg(atan2f(y_c, x_c)));
+  VERBOSE_PRINT("check me bitch 2= %d\n", masked_frame3[50000]);
   VERBOSE_PRINT("Test if mask frame works = %d", count );
   pthread_mutex_lock(&mutex);
   global_filters[0].color_count =count;
@@ -155,11 +161,11 @@ void obstacle_detector_init(void)
 uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
                               uint8_t cb_min, uint8_t cb_max,
-                              uint8_t cr_min, uint8_t cr_max)
+                              uint8_t cr_min, uint8_t cr_max, uint32_t *masked_frame2)
 {
   uint32_t cnt = 0;
   uint32_t len = img->h*img->w;
-  uint32_t masked_frame[len] ;
+  //uint32_t masked_frame[len] ;
   uint32_t tot_x = 0;
   uint32_t tot_y = 0;
   uint8_t *buffer = img->buf;
@@ -192,7 +198,8 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
         tot_x += x;
         tot_y += y;
         int idx = y * img->w +x;
-        masked_frame[idx] = 1;
+        //masked_frame[idx] = 1;
+        masked_frame2[idx] = 1;
         if (draw){
           *yp = 255;  // make pixel brighter in image
           *up = 128;
@@ -201,7 +208,8 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
               
       }else {
            int idx = y * img->w +x;
-           masked_frame[idx] = 0;
+           //masked_frame[idx] = 0;
+           masked_frame2[idx] = 0;
           if (draw){
             *yp = 0;
             *up = 128;
@@ -215,7 +223,7 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
   VERBOSE_PRINT("cnt = %d\n",cnt);
   uint32_t summy = 0;
   for (int ica = len-1; ica >= 0; ica--) {
-    summy += masked_frame[ica];
+    summy += masked_frame2[ica];
   }
   //VERBOSE_PRINT("%d/%d/%d\n", masked_frame[50000], masked_frame[100000], masked_frame[len]);
   double percentage;
