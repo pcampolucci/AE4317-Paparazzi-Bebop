@@ -99,7 +99,7 @@ static struct image_t *object_detector(struct image_t *img)
 
   int32_t x_c, y_c;
 
-  uint32_t lenn = 240 * 520;
+  uint32_t lenn = img->w*img->h;
   uint32_t masked_frame3[lenn] ;
   memset( masked_frame3, 0, lenn*sizeof(uint32_t) );
   VERBOSE_PRINT("check me bitch 1= %d\n", masked_frame3[50000]);
