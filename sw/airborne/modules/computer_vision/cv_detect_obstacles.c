@@ -64,6 +64,32 @@ uint8_t cod_cr_max = 0;
 
 bool cod_draw = false;
 
+
+#define ROW_OBST 100
+#define COL_OBST 3
+#define HEIGHT_PIX 8  // height is 240 pix
+#define WIDTH_PIX 10  // width is 520 pix
+
+// REFERENCE FRAME: LANDSCAPE PICTURE 
+// ______________________________
+// |                            |
+// |                            |
+// |                            |
+// |                            |
+// ______________________________
+
+int altitude = 1.09100; //meters
+int FOV_horizontal = 110;  // degrees (pls update Alessandro ;))
+int FOV_vertical = 52.3024;  // degrees
+int nsectcol = 5;  // amount of sectors
+int npixh = 2;  // pixels per sector
+int nsectrow = 4;  // amount of sectors
+int npixv = 2; // pixels per sector
+float e = 2.71828;  // the constant
+
+float output_array[ROW_OBST][COL_OBST] = {}; 
+int black_array[HEIGHT_PIX*WIDTH_PIX] = {};
+
 // define global variables
 struct color_object_t {
   int32_t x_c;
@@ -121,6 +147,7 @@ static struct image_t *object_detector(struct image_t *img)
   return img;
 }
 
+
 // struct image_t *object_detector1(struct image_t *img);
 // struct image_t *object_detector1(struct image_t *img)
 // {
@@ -128,6 +155,236 @@ static struct image_t *object_detector(struct image_t *img)
 // }
 
 //cancelled call for object dector 1 and 2 as we do not have a switch anymore
+
+
+
+int getBlackArray(float threshold, int *maskie, int *blackie){
+    int sum_sec_line = 0; 
+    int sum_sec_tot = 0;
+    float average = 0; 
+    int countie = 0; 
+    // Loops through the sectors from top to bottom
+    for (int g = 0; g < nsectrow; g++){
+        // Loops throught the sectors from left to right
+        printf("New Row ");
+        for (int i = 0; i < nsectcol; i++){
+            sum_sec_tot = 0; 
+            average = 0; 
+            // Loops through the amount of rows of 1 sector
+            for (int j=0; j < npixh; j++){
+                sum_sec_line = 0; 
+                // Loops through the amount of columns of 1 sector
+                for (int k=0; k < npixv; k++){
+                   // sum_sec_line = sum_sec_line + maskie[k+j*WIDTH_PIX+i*npixv+g*HEIGHT_PIX]; 
+                   sum_sec_line = sum_sec_line + maskie[k+j*HEIGHT_PIX+i*npixv+g*HEIGHT_PIX*npixh]; 
+                }
+                sum_sec_tot = sum_sec_tot + sum_sec_line;
+                
+            }
+            // Get full sector
+            average = sum_sec_tot/(npixv*npixh);
+            printf("%i ", i);
+            printf("%f \n", average);
+            if (average<threshold){
+                blackie[nsectrow-1 + i*nsectrow -g] = 0;
+                printf("%i \n", nsectrow-1 + i*nsectrow -g); 
+                printf("Im in zero \n");
+            }
+            else
+            {
+                blackie[nsectrow-1 + i*nsectrow -g] = 1; 
+                //printf("Im in one \n");
+                printf("%i \n", nsectrow-1 + i*nsectrow -g); 
+            }
+            countie++; 
+        } 
+    }   
+}
+
+
+int get_obstacles(int nsectcol, int nsectrow, int *black_array, int *obs_2){
+    int obs_counter         = 0;
+    int obs_1[50][3]        ={0};
+    // int obs_2[50][3]        ={0};
+    int rewriter,rewriter2  = 0;
+    int i,j,p,pnew,o,count1;
+    int minl,maxr,cr        = 0;
+
+    
+        
+    for (i=0; i<nsectcol;i++){ 
+        for (j=0; j<nsectrow;j++){     
+            p       = black_array[i*nsectrow+j];        //check-value of current sector
+            pnew    = black_array[i*nsectrow+j+1];      //cehck-value of following sector
+            if (p - pnew < 0 && j<nsectrow-1){           //activate on white-to-black step, accounting for counter                      
+                obs_1[count1][1]=j+1;
+                obs_1[count1][0]=i;
+                count1 +=1;   
+            } 
+            if (p - pnew == 1 && j<nsectrow-1 && obs_1[count1-1][1]<=j+1 && obs_1[count1-1][1]!=0){
+                obs_1[count1-1][2]=j+1; 
+            }   
+        }
+    }
+    for(i=0;i<50;i++){
+    
+        if (obs_1[i][0]==0 || obs_1[i][1]==0 || obs_1[i][2]==0){
+            obs_1[i][0]=0;
+            obs_1[i][1]=0;
+            obs_1[i][2]=0;
+        }
+        else{                      
+            obs_1[rewriter][0] =  obs_1[i][0];
+            obs_1[rewriter][1] =  obs_1[i][1];
+            obs_1[rewriter][2] =  obs_1[i][2];
+            obs_1[i][0]=0;
+            obs_1[i][1]=0;
+            obs_1[i][2]=0;
+            rewriter +=1;
+        }
+    }   
+    for(i=0;i<50;i++){            
+        if(obs_1[i][0]!=0)
+        {   
+            
+            for(j=0+i;j<50;j++)
+            {
+                if(obs_1[j][0]>obs_1[i][0])
+                {
+                    if (obs_1[j][1] >= obs_1[i][1]  && obs_1[j][1] <= obs_1[i][2]){
+                        if(obs_1[j][2] > obs_1[i][2]){
+                            maxr = obs_1[j][2];
+                            minl = obs_1[i][1];
+                        }
+                        else{
+                            maxr = obs_1[i][2];
+                            minl = obs_1[i][1];
+                        }
+                        cr = obs_1[j][0];   
+                    }
+                    if (obs_1[j][2] >= obs_1[i][1]  && obs_1[j][2] <= obs_1[i][2]){
+                        if(obs_1[j][1] < obs_1[i][1]){
+                            maxr = obs_1[i][2];
+                            minl = obs_1[j][1];
+                        }
+                        else{
+                            maxr = obs_1[i][2];
+                            minl = obs_1[i][1];
+                        }   
+                        cr = obs_1[j][0];   
+                    }            
+                }    
+            }
+            if(cr==0){}
+            else{
+                if(obs_2[(rewriter2-1)*3+0]== cr){
+                    
+                    if(obs_2[(rewriter2-1)*3+1]==minl && obs_2[(rewriter2-1)*3+2]==maxr){
+                        cr=0;
+                        minl=0;
+                        maxr=0; 
+                    }
+                    if(obs_2[(rewriter2-1)*3+1]<minl || obs_2[(rewriter2-1)*3+2]>maxr){
+                        cr=0;
+                        minl=0;
+                        maxr=0; 
+                    }
+                }
+                else{
+                    obs_2[rewriter2*3+0]=cr;
+                    obs_2[rewriter2*3+1]=minl;
+                    obs_2[rewriter2*3+2]=maxr;
+                    rewriter2 +=1;
+                    cr=0;
+                    minl=0;
+                    maxr=0; 
+                }                
+            }
+        }
+    }     
+}
+
+
+
+
+int heading_calc(int l_sec, int r_sec, float *head_array){  
+    //convert sectors into pixels
+    int l_pixels = (l_sec+1)*npixh;
+    int r_pixels = r_sec * npixh;
+    float factor = 0.2023;
+    float heading_l =0; 
+    float heading_r =0; 
+
+    if (l_pixels < (WIDTH_PIX/2)) {
+        heading_l = -factor * (l_pixels - (WIDTH_PIX / 2));
+        head_array[0] = heading_l;
+    }
+    else if (l_pixels >= (WIDTH_PIX/2)){
+        heading_l = factor * (l_pixels - (WIDTH_PIX / 2));
+        head_array[0] = heading_l;
+    }
+    if (r_pixels < (WIDTH_PIX/2)){
+        heading_r = -factor * (r_pixels - (WIDTH_PIX / 2));
+        head_array[1] = heading_r;
+    }
+    else if (r_pixels >= (WIDTH_PIX/2)){
+        heading_r = factor * (r_pixels - (WIDTH_PIX / 2));
+        head_array[1] = heading_r;
+    }
+    return 0; //QUESTION: why return 0??
+}
+
+float distCalc(int nsectors){
+    int npixels = (nsectrow - 1 - nsectors)*npixv;
+    float dist = 0; 
+    if (npixels <= 1){
+        dist = 0;
+    }
+    else if (npixels < 10){
+        dist = (1/(pow(0.45,(npixels/43))))-1 + altitude/tan((FOV_vertical/2)/57.2958);
+    }
+    else if (npixels < 200){
+        dist = 0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels))) + altitude/tan((FOV_vertical/2)/57.2958);
+    }
+    else{
+        dist = 1000; 
+    }
+    return dist; 
+}
+
+int distAndHead(int *obstacle_array, float *input_array){
+    // {{0, 0, 0}, {43, 29, 31}, {47, 8, 11}, {0, 0, 0}}
+    int input_dist = 0;
+    int input_headl = 0; 
+    int input_headr = 0; 
+    float heading_array[2] = {};
+
+    for(int i=0; i < COL_OBST*ROW_OBST; i=i+3){
+        // check for zeros 
+        input_dist = obstacle_array[i];
+        input_headl = obstacle_array[i+1];
+        input_headr = obstacle_array[i+2]; 
+
+        int sum = input_dist + input_headl + input_headr;
+        if (sum == 0){
+            break; 
+        }
+        else{
+            headingCalc(input_headl, input_headr, heading_array);
+            input_array[i] = distCalc(input_dist);
+            input_array[i+1] = heading_array[0];
+            input_array[i+2] = heading_array[1]; 
+        }
+
+        // get distance 
+
+        // get heading
+    }
+
+}
+
+
+
 
 
 
