@@ -167,10 +167,10 @@ static struct image_t *object_detector(struct image_t *img)
   //    VERBOSE_PRINT("\n");
   //  }
   getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
-  // VERBOSE_PRINT("IM GOING INTO GET OBSTACLES \n");
+  VERBOSE_PRINT("IM GOING INTO GET OBSTACLES \n");
   // for (int iii=0;iii<process_variables.nsectrow;iii++){
   //   for(int iv=0;iv<process_variables.nsectcol;iv++){
-  //     VERBOSE_PRINT("%i ",black_array[iii*process_variables.nsectrow + iv]);
+  //     VERBOSE_PRINT("%i ",black_array[iii*process_variables.nsectcol + iv]);
   //   }
   //   VERBOSE_PRINT("\n");
   // }
@@ -233,14 +233,19 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
 
             // Get full sector
             average = sum_sec_tot/(npixv*npixh);
-            VERBOSE_PRINT("AVERAGE IS %f \n", average);
+            //VERBOSE_PRINT("AVERAGE IS %f \n", average);
             //VERBOSE_PRINT("COUNTIE IS %i \n", countie);
+            //VERBOSE_PRINT("%f \n", threshold);
             if (average<threshold){
                 blackie[nsectcol*(nsectrow-1-g)+i] = 0;
+                //VERBOSE_PRINT("HALLO I AM ZERO ");
+                //VERBOSE_PRINT("%i \n", nsectcol*(nsectrow-1-g)+i);
                 //VERBOSE_PRINT("BLACKIE VALUE %i \n",blackie[nsectcol*(nsectrow-1-g)+i] );
             }
             else{
                 blackie[nsectcol*(nsectrow-1-g)+i] = 1;
+                //VERBOSE_PRINT("HALLO I AM ONEEEE ");
+                //VERBOSE_PRINT("%i \n", nsectcol*(nsectrow-1-g)+i);
                 //VERBOSE_PRINT("BLACKIE VALUE %i \n",blackie[nsectcol*(nsectrow-1-g)+i] );
             }
             countie++; 
