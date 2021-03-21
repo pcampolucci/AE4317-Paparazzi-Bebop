@@ -16,11 +16,10 @@
 
 #include "state.h"
 
-// global settings
+// Local constants
+#define OUTER_TRAJECTORY_LENGTH 3
 #define INNER_TRAJECTORY_LENGTH 5
-#define OBSTACLES_IN_MAP 1
-
-// define struct objects
+#define OBSTACLES_IN_MAP 0
 
 // Obstacle struct used for optimization and avoidance
 struct Obstacle {
@@ -55,13 +54,8 @@ struct PotentialMap {
 // trajectory list
 struct TrajectoryList {
   struct EnuCoor_i *inner_trajectory;
+  uint8_t size;
 };
-
-// settings
-void build_trajectory(void);
-
-// settings
-extern float oa_color_count_frac;
 
 // functions
 extern void orange_avoider_init(void);

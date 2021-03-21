@@ -19,9 +19,9 @@
 // Local constants
 #define KP 5
 #define ETA 100
-#define AREA_WIDTH 30
+#define AREA_WIDTH 27
 #define OSCILLATION_DETECTION_LENGTH 6
-#define GRID_SIZE 0.1
+#define GRID_SIZE 0.5
 #define DRONE_RADIUS 0.3
 
 #ifdef INFINITY
@@ -43,18 +43,23 @@ struct PotentialMap potential;
 /*
  * Do the actual magic
  */
-struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory) {
-  VERBOSE_PRINT("[OPTIMIZER] Trajectory Optimisation Started \n");
+struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *current_length) {
+  VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
 
   // setup initial conditions required for the optimisation
-  double sx = POS_FLOAT_OF_BFP(start_trajectory[0].x);                        // starting point in x [m]
-  double sy = POS_FLOAT_OF_BFP(start_trajectory[0].y);                        // starting point in y [m]
-  double gx = POS_FLOAT_OF_BFP(start_trajectory[INNER_TRAJECTORY_LENGTH-1].x);      // final point in x [m]
-  double gy = POS_FLOAT_OF_BFP(start_trajectory[INNER_TRAJECTORY_LENGTH-1].y);      // final point in y [m]
+  double sx = POS_FLOAT_OF_BFP(start_trajectory[0].x);                      // starting point in x [m]
+  double sy = POS_FLOAT_OF_BFP(start_trajectory[0].y);                      // starting point in y [m]
+  double gx = POS_FLOAT_OF_BFP(start_trajectory[*current_length-1].x);      // final point in x [m]
+  double gy = POS_FLOAT_OF_BFP(start_trajectory[*current_length-1].y);      // final point in y [m]
 
   // get list of obstacles that will be inserted in the optimisation
   double *ox = malloc(sizeof(double*) * OBSTACLES_IN_MAP);
   double *oy = malloc(sizeof(double*) * OBSTACLES_IN_MAP);
+
+  // get first and last point to append to the resulting trajectory
+  int last_point_index = *current_length;
+  struct EnuCoor_i first_point = start_trajectory[0];
+  struct EnuCoor_i last_point = start_trajectory[last_point_index-1];
 
   for (int i = 0; i < OBSTACLES_IN_MAP; i++) {
     ox[i] = POS_FLOAT_OF_BFP(obstacle_map[i].loc.x);
@@ -62,31 +67,41 @@ struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuC
     VERBOSE_PRINT("[OPTIMIZER] Obstacle in Map (%f/%f)\n", ox[i], oy[i]);
   }
 
-  VERBOSE_PRINT("[OPTIMIZER] Received Trajectory of length: %d\n", INNER_TRAJECTORY_LENGTH);
-  VERBOSE_PRINT("[OPTIMIZER] Initial Trajectory of length: %d\n", resulting_trajectory.size);
+  VERBOSE_PRINT("[OPTIMIZER] Received Trajectory of length: %d\n", *current_length);
   VERBOSE_PRINT("[OPTIMIZER] Sending (%f/%f) as starting point\n", sx, sy);
   VERBOSE_PRINT("[OPTIMIZER] Sending (%f/%f) as goal point\n", gx, gy);
-  // VERBOSE_PRINT("Sending (%f) as grid size\n", grid_size);
-  // VERBOSE_PRINT("Sending (%f) as drone radius\n", robot_radius);
 
   // run the optimisation and return a new Trajectory
   potential_field_planning(sx, sy, gx, gy, ox, oy, GRID_SIZE, DRONE_RADIUS);
 
+  free(ox);
+  free(oy);
+
   VERBOSE_PRINT("[OPTIMIZER] Post Computed Trajectory of length: %d\n", resulting_trajectory.size);
+  *current_length = resulting_trajectory.size;
 
   // once this is done rx and ry should be ready to be sent to the Trajectory
   // first we reallocate once the Trajectory to the new length
-  start_trajectory = malloc(sizeof(struct EnuCoor_i) * resulting_trajectory.size);
+  struct EnuCoor_i *optimized_trajectory;
+  optimized_trajectory = malloc(sizeof(struct EnuCoor_i) * (resulting_trajectory.size));
 
   // then we go through the whole new Trajectory to assign the new values
-  for (int i = 0; i < resulting_trajectory.size; i++) {
-    start_trajectory[i].x = POS_BFP_OF_REAL(resulting_trajectory.x[i]);
-    start_trajectory[i].y = POS_BFP_OF_REAL(resulting_trajectory.y[i]);
-    VERBOSE_PRINT("[OPTIMIZER] Adding point %f/%f\n", POS_FLOAT_OF_BFP(start_trajectory[i].x), POS_FLOAT_OF_BFP(start_trajectory[i].y));
+  for (int i = 1; i < resulting_trajectory.size-1; i++) {
+    optimized_trajectory[i].x = POS_BFP_OF_REAL(resulting_trajectory.x[i+1]);
+    optimized_trajectory[i].y = POS_BFP_OF_REAL(resulting_trajectory.y[i+1]);
   }
 
-  return start_trajectory;
+  // append first and last point
+  optimized_trajectory[0] = first_point;
+  optimized_trajectory[resulting_trajectory.size-1] = last_point;
 
+  for (int i = 0; i < resulting_trajectory.size; i++) {
+    VERBOSE_PRINT("[OPTIMIZER] Adding point %f/%f\n", POS_FLOAT_OF_BFP(optimized_trajectory[i].x), POS_FLOAT_OF_BFP(optimized_trajectory[i].y));
+  }
+
+  VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
+
+  return optimized_trajectory;
 }
 
 /*
@@ -96,7 +111,7 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
 
   //VERBOSE_PRINT("Potential Field Calculation started\n");
 
-  // update old field information
+  // update old field information 
   calc_potential_field(gx, gy, ox, oy, reso, rr, sx, sy);
 
   // get new potential field
@@ -173,6 +188,9 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
   resulting_trajectory.y = ry;
   resulting_trajectory.size = trajectory_size;
 
+  free(rx);
+  free(ry);
+
 }
 
 /*
@@ -220,6 +238,7 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
   potential.size_x = xw;
   potential.size_y = yw;
 
+  free(pmap);
 }
 
 /*
@@ -306,7 +325,9 @@ int MaxArray(double *array, int n)
     return mx; 
 }
 
-// Helper 2: estimate min value in the array
+/*
+ * Helper 2: estimate min value in the array
+ */
 int MinArray(double *array, int n) 
 { 
     int mx = 10e5; 

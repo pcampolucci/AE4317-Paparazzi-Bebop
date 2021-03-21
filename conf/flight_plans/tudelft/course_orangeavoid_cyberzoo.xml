@@ -13,8 +13,8 @@
     <waypoint name="CLIMB" x="1.9" y="1.0"/>
     <waypoint name="STDBY" x="1.9" y="1.0"/>
     <waypoint name="TD" x="2.0" y="2.0"/>
-    <waypoint name="GOAL" x="1.9" y="1.0"/>
-    <waypoint name="TRAJECTORY" x="1.9" y="1.0"/>
+    <!-- <waypoint name="GOAL" x="1.9" y="1.0"/>
+    <waypoint name="TRAJECTORY" x="1.9" y="1.0"/> -->
     <waypoint name="OUTER" x="0.0" y="0.0"/>
     <waypoint name="INNER" x="0.0" y="0.0"/>
     <waypoint lat="51.9905834" lon="4.3767710" name="_CZ1"/>
@@ -105,8 +105,8 @@
       <stay wp="STDBY"/>
     </block>
     <block key="g" name="START" strip_button="Go" strip_icon="lookfore.png">
-      <call_once fun="NavSetWaypointHere(WP_GOAL)"/>
-      <stay wp="GOAL"/>
+      <call_once fun="NavSetWaypointHere(WP_INNER)"/>
+      <stay wp="INNER"/>
     </block>
     <block name="STOP">
       <call_once fun="NavSetWaypointHere(WP_STDBY)"/>
