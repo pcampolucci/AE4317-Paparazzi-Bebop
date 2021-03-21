@@ -159,9 +159,21 @@ static struct image_t *object_detector(struct image_t *img)
   //       hypotf(x_c, y_c) / hypotf(img->w * 0.5, img->h * 0.5), RadOfDeg(atan2f(y_c, x_c)));
   //VERBOSE_PRINT("check me bitch 2= %d\n", masked_frame_f[50000]);
   //VERBOSE_PRINT("Test if mask frame works = %d", count );
-  VERBOSE_PRINT("IM GOING INTO BLACKIE \n");
+  // VERBOSE_PRINT("IM GOING INTO BLACKIE \n");
+  // for (int iii=0;iii<520;iii++){
+  //   for(int iv=0;iv<240;iv++){
+  //     VERBOSE_PRINT("%i ",masked_frame_f[iii*240 + iv]);
+  //   }
+  //   VERBOSE_PRINT("\n");
+  // }
   getBlackArray(0.6, masked_frame_f, black_array, &process_variables);  // Make threshold slider
   VERBOSE_PRINT("IM GOING INTO GET OBSTACLES \n");
+  // for (int iii=0;iii<process_variables.nsectrow;iii++){
+  //   for(int iv=0;iv<process_variables.nsectcol;iv++){
+  //     VERBOSE_PRINT("%i ",black_array[iii*process_variables.nsectrow + iv]);
+  //   }
+  //   VERBOSE_PRINT("\n");
+  // }
   getObstacles(black_array, obstacle_array, &process_variables);
   VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   VERBOSE_PRINT("IM GOING INTO DISTANDHEAD \n");
@@ -225,11 +237,11 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
             //VERBOSE_PRINT("AVERAGE IS %f ", average);
             //VERBOSE_PRINT("COUNTIE IS %i \n", countie);
             if (average<threshold){
-                blackie[nsectcol*(nsectrow-1-g)+i] = 0;
+                blackie[nsectcol*(nsectrow-1-g)+i] = 1;
                 //VERBOSE_PRINT("BLACKIE VALUE %i \n",blackie[nsectcol*(nsectrow-1-g)+i] );
             }
             else{
-                blackie[nsectcol*(nsectrow-1-g)+i] = 1;
+                blackie[nsectcol*(nsectrow-1-g)+i] = 0;
                 //VERBOSE_PRINT("BLACKIE VALUE %i \n",blackie[nsectcol*(nsectrow-1-g)+i] );
             }
             countie++; 
