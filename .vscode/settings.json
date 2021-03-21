@@ -9,6 +9,7 @@
         "editor.tabSize": 4,
     },
     "files.associations": {
+        "unistd.h": "c"
         "cmath": "c",
         "array": "c",
         "hash_map": "c",

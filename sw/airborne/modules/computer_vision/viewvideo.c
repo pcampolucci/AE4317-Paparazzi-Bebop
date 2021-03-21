@@ -40,6 +40,9 @@
 #include <sys/time.h>
 #include <math.h>
 
+// Masking image
+#include <cv_detect_obstacles.h>
+
 // Video
 #include "lib/vision/image.h"
 #include "lib/encoding/jpeg.h"
@@ -87,6 +90,8 @@ PRINT_CONFIG_MSG("[viewvideo] Using netcat.")
 #else
 struct UdpSocket video_sock1;
 struct UdpSocket video_sock2;
+struct UdpSocket video_sock_m;
+
 PRINT_CONFIG_MSG("[viewvideo] Using RTP/UDP stream.")
 PRINT_CONFIG_VAR(VIEWVIDEO_USE_RTP)
 #endif
@@ -95,6 +100,7 @@ PRINT_CONFIG_VAR(VIEWVIDEO_USE_RTP)
 PRINT_CONFIG_VAR(VIEWVIDEO_HOST)
 PRINT_CONFIG_VAR(VIEWVIDEO_PORT_OUT)
 PRINT_CONFIG_VAR(VIEWVIDEO_PORT2_OUT)
+PRINT_CONFIG_VAR(VIEWVIDEO_PORT_M_OUT)
 
 // Initialize the viewvideo structure with the defaults
 struct viewvideo_t viewvideo = {
@@ -212,6 +218,18 @@ static struct image_t *viewvideo_function2(struct image_t *img)
 }
 #endif
 
+#ifdef VIEWVIDEO_CAMERA_M
+static struct image_t *viewvideo_function_m(struct image_t *img)
+{
+  //mask_it(&img,0,0,1,0,255,0,110,0,130);
+  static uint16_t rtp_packet_nr = 0;
+  static uint32_t rtp_frame_time = 0;
+  static struct image_t img_small = {.buf=NULL, .buf_size=0};
+  static struct image_t img_jpeg = {.buf=NULL, .buf_size=0};
+  return viewvideo_function(&video_sock_m, img, &rtp_packet_nr, &rtp_frame_time, &img_small, &img_jpeg);
+}
+#endif
+
 /**
  * Initialize the view video
  */
@@ -259,6 +277,13 @@ void viewvideo_init(void)
            VIEWVIDEO_PORT2_OUT);
   }
 #endif
+
+#ifdef VIEWVIDEO_CAMERA_M
+  if (udp_socket_create(&video_sock_m, STRINGIFY(VIEWVIDEO_HOST), VIEWVIDEO_PORT_M_OUT, -1, VIEWVIDEO_BROADCAST)) {
+    printf("[viewvideo]: failed to open view video socket, HOST=%s, port=%d\n", STRINGIFY(VIEWVIDEO_HOST),
+           VIEWVIDEO_PORT_M_OUT);
+  }
+#endif
 #endif
 
 #ifdef VIEWVIDEO_CAMERA
@@ -271,5 +296,11 @@ void viewvideo_init(void)
   cv_add_to_device_async(&VIEWVIDEO_CAMERA2, viewvideo_function2,
                          VIEWVIDEO_NICE_LEVEL, VIEWVIDEO_FPS);
   fprintf(stderr, "[viewvideo] Added asynchronous video streamer listener for CAMERA2 at %u FPS \n", VIEWVIDEO_FPS);
+#endif
+
+#ifdef VIEWVIDEO_CAMERA_M
+  cv_add_to_device_async(&VIEWVIDEO_CAMERA_M, viewvideo_function_m,
+                         VIEWVIDEO_NICE_LEVEL, VIEWVIDEO_FPS);
+  fprintf(stderr, "[viewvideo] Added asynchronous video streamer listener for CAMERA MASK at %u FPS \n", VIEWVIDEO_FPS);
 #endif
 }

@@ -1,0 +1,74 @@
+<!DOCTYPE module SYSTEM "module.dtd">
+
+<module name="cv_detect_obstacles" dir="computer_vision">
+  <doc>
+    <description>Select_front_camera</description>
+    <define name="OBSTACLE_DETECTOR_CAMERA" value="front_camera|bottom_camera" description="Video device to use"/>
+    <define name="OBSTACLE_DETECTOR_FPS" value="0" description="Desired FPS (0: camera rate)"/>
+    <define name="OBSTACLE_DETECTOR_LUM_MIN" value="0" description="Filter 1 min luminance"/>
+    <define name="OBSTACLE_DETECTOR_LUM_MAX" value="0" description="Filter 2 max luminance"/>
+    <define name="OBSTACLE_DETECTOR_CB_MIN" value="0" description="Filter 2 min blue chroma"/>
+    <define name="OBSTACLE_DETECTOR_CB_MAX" value="0" description="Filter 2 max blue chroma"/>
+    <define name="OBSTACLE_DETECTOR_CR_MIN" value="0" description="Filter 2 min red chroma"/>
+    <define name="OBSTACLE_DETECTOR_CR_MAX" value="0" description="Filter 2 max red chroma"/>
+    <define name="OBSTACLE_DETECTOR_DRAW" value="FALSE|TRUE" description="Whether or not to draw on image"/>
+  </doc>
+
+  <settings>
+    <dl_settings>
+      <dl_settings name="ColorObjectDetector">
+         <dl_setting var="cod_lum_min" min="0" step="1" max="255" shortname="y_min"/>
+         <dl_setting var="cod_lum_max" min="0" step="1" max="255" shortname="y_max"/>
+         <dl_setting var="cod_cb_min"   min="0" step="1" max="255" shortname="u_min"/>
+         <dl_setting var="cod_cb_max"   min="0" step="1" max="255" shortname="u_max"/>
+         <dl_setting var="cod_cr_min"   min="0" step="1" max="255" shortname="v_min"/>
+         <dl_setting var="cod_cr_max"   min="0" step="1" max="255" shortname="v_max"/>
+         <dl_setting var="cod_draw"  min="0" step="1" max="1" values="False|True" shortname="draw" />
+      </dl_settings>
+    </dl_settings>
+  </settings>
+
+  <depends>video_thread</depends>
+
+  <header>
+    <file name="cv_detect_obstacles.h"/>
+  </header>
+  <init fun="obstacle_detector_init()"/>
+  <periodic fun="obstacle_detector_periodic()" freq="50"/>
+  <makefile>
+    <file name="cv_detect_obstacles.c"/>
+    <!-- <configure name="CXXSTANDARD" value="-std=c++11"/>
+    <file name="cv_detect_obstacles.cpp"/> -->
+  </makefile>
+</module>
+
+<!-- <!DOCTYPE module SYSTEM "module.dtd">
+
+<module name="cv_detect_obstacles" dir="computer_vision">
+  <doc>
+    <description>
+    New CV pipeline
+    </description>
+    <define name="OBSTACLE_DETECTOR_CAMERA" value="front_camera|bottom_camera" description="Video device to use"/>
+    <define name="OBSTACLE_DETECTOR_FPS" value="0" description="Desired FPS (0: camera rate)"/>
+  </doc>
+
+  <settings>
+    <dl_settings>
+      <dl_settings name="ColorObjectDetector"/>
+    </dl_settings>
+  </settings>
+
+  <depends>video_thread</depends>
+
+  <header>
+    <file name="cv_detect_obstacles.h"/>
+  </header>
+
+  <init fun="obstacle_detector_init()"/>
+  <periodic fun="obstacle_detector_periodic()" freq="50"/>
+  <makefile target="ap|nps">
+    <file name="cv_detect_obstacles.c"/>
+  </makefile>
+</module> -->
+

@@ -480,6 +480,10 @@
 #define COLOR_OBJECT_DETECTION2_ID 2
 #endif
 
+#ifndef OBSTACLE_DETECTION_ID
+#define OBSTACLE_DETECTION_ID 3
+#endif
+
 /*
  * JOYSTICK message (used for payload or control, but not as a RC)
  */
