@@ -167,7 +167,7 @@ static struct image_t *object_detector(struct image_t *img)
   //    VERBOSE_PRINT("\n");
   //  }
   getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
-  VERBOSE_PRINT("IM GOING INTO GET OBSTACLES \n");
+  
   // for (int iii=0;iii<process_variables.nsectrow;iii++){
   //   for(int iv=0;iv<process_variables.nsectcol;iv++){
   //     VERBOSE_PRINT("%i ",black_array[iii*process_variables.nsectcol + iv]);
@@ -254,108 +254,146 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
 }
 
 
-void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var){
-    int nsectrow = var->nsectrow; 
-    int nsectcol = var->nsectcol;
-    int npixh = var->npixh;
-    int npixv = var->npixv; 
-    int height_pic = var->height_pic;
-    int width_pic = var->width_pic;
-    int obs_counter         = 0;
-    int obs_1[50][3]        ={0};
-    int rewriter,rewriter2  = 0;
-    int i,j,p,pnew,o,count1;
-    int minl,maxr,cr        = 0;
+void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
+{
+  int nsectrow = var->nsectrow; 
+  int nsectcol = var->nsectcol;
+  int npixh = var->npixh;
+  int npixv = var->npixv; 
+  int height_pic = var->height_pic;
+  int width_pic = var->width_pic;
+  int obs_counter         = 0;
+  int obs_1[50][3]        ={0};
+  int rewriter,rewriter2  = 0;
+  int i,j,p,pnew,o,count1;
+  int minl,maxr,cr        = 0;
 
-    for (i=0; i<nsectcol;i++){ 
-        for (j=0; j<nsectrow;j++){     
-            p       = black_array[i*nsectrow+j];        //check-value of current sector
-            pnew    = black_array[i*nsectrow+j+1];      //cehck-value of following sector
-            if (p - pnew < 0 && j<nsectrow-1){           //activate on white-to-black step, accounting for counter                      
-                obs_1[count1][1]=j+1;
-                obs_1[count1][0]=i;
-                count1 +=1;   
-            } 
-            if (p - pnew == 1 && j<nsectrow-1 && obs_1[count1-1][1]<=j+1 && obs_1[count1-1][1]!=0){
-                obs_1[count1-1][2]=j+1; 
-            }   
-        }
-    }
-    for(i=0;i<50;i++){
+  for(i=0;i<50;i++)
+    {   
+    obs_2[i*3+0]=0  ;
+    obs_2[i*3+1]=0  ;
+    obs_2[i*3+2]=0  ;
+    }  
     
-        if (obs_1[i][0]==0 || obs_1[i][1]==0 || obs_1[i][2]==0){
-            obs_1[i][0]=0;
-            obs_1[i][1]=0;
-            obs_1[i][2]=0;
+  i=0;
+
+
+  
+  for (i=0; i<nsectcol;i++)
+  { 
+      for (j=0; j<nsectrow;j++)
+      {     
+        p       = black_array[i*nsectrow+j];        //check-value of current sector
+        pnew    = black_array[i*nsectrow+j+1];      //cehck-value of following sector
+        if (p - pnew < 0 && j<nsectrow-1){          //activate on white-to-black step, accounting for counter  
+
+          obs_1[count1][1]=j+1;
+          obs_1[count1][0]=i;
+          count1 +=1;   
+        } 
+        if (p - pnew == 1 && j<nsectrow-1 && obs_1[count1-1][1]<=j+1 && obs_1[count1-1][1]!=0){
+          obs_1[count1-1][2]=j+1; 
         }
-        else{                      
-            obs_1[rewriter][0] =  obs_1[i][0];
-            obs_1[rewriter][1] =  obs_1[i][1];
-            obs_1[rewriter][2] =  obs_1[i][2];
-            obs_1[i][0]=0;
-            obs_1[i][1]=0;
-            obs_1[i][2]=0;
-            rewriter +=1;
-        }
-    }   
-    for(i=0;i<50;i++){            
-        if(obs_1[i][0]!=0)
-        {   
-            
-            for(j=0+i;j<50;j++)
-            {
-                if(obs_1[j][0]>obs_1[i][0])
-                {
-                    if (obs_1[j][1] >= obs_1[i][1]  && obs_1[j][1] <= obs_1[i][2]){
-                        if(obs_1[j][2] > obs_1[i][2]){
-                            maxr = obs_1[j][2];
-                            minl = obs_1[i][1];
-                        }
-                        else{
-                            maxr = obs_1[i][2];
-                            minl = obs_1[i][1];
-                        }
-                        cr = obs_1[j][0];   
-                    }
-                    if (obs_1[j][2] >= obs_1[i][1]  && obs_1[j][2] <= obs_1[i][2]){
-                        if(obs_1[j][1] < obs_1[i][1]){
-                            maxr = obs_1[i][2];
-                            minl = obs_1[j][1];
-                        }
-                        else{
-                            maxr = obs_1[i][2];
-                            minl = obs_1[i][1];
-                        }   
-                        cr = obs_1[j][0];   
-                    }            
-                }    
-            }
-            if(cr==0){}
-            else{
-                if(obs_2[(rewriter2-1)*3+0]== cr){
-                    if(obs_2[(rewriter2-1)*3+1]==minl && obs_2[(rewriter2-1)*3+2]==maxr){
-                        cr=0;
-                        minl=0;
-                        maxr=0; 
-                    }
-                    if(obs_2[(rewriter2-1)*3+1]<minl || obs_2[(rewriter2-1)*3+2]>maxr){
-                        cr=0;
-                        minl=0;
-                        maxr=0; 
-                    }
-                }
-                else{
-                    obs_2[rewriter2*3+0]=cr;
-                    obs_2[rewriter2*3+1]=minl;
-                    obs_2[rewriter2*3+2]=maxr;
-                    rewriter2 +=1;
+        // VERBOSE_PRINT("Adding detection \n");  
+      }
+      
+  }
+
+  count1 = 0;
+
+  for(i=0;i<15;i++)
+    {   
+        printf("obstacle %d %d %d \n",obs_1[i][0],obs_1[i][1],obs_1[i][2]);
+    }  
+  i=0;
+
+
+  for(i=0;i<50;i++)
+  {
+  
+      if (obs_1[i][0]==0 || obs_1[i][1]==0 || obs_1[i][2]==0){
+        obs_1[i][0]=0;
+        obs_1[i][1]=0;
+        obs_1[i][2]=0;
+      }
+      else{                      
+        obs_1[rewriter][0] =  obs_1[i][0];
+        obs_1[rewriter][1] =  obs_1[i][1];
+        obs_1[rewriter][2] =  obs_1[i][2];
+        obs_1[i][0]=0;
+        obs_1[i][1]=0;
+        obs_1[i][2]=0;
+        rewriter +=1;
+      }
+  } 
+
+  rewriter = 0;  
+  for(i=0;i<50;i++)
+  {            
+      if(obs_1[i][0]!=0)
+      {   
+          
+          for(j=0+i;j<50;j++)
+          {
+              if(obs_1[j][0]>obs_1[i][0])
+              {
+                  if (obs_1[j][1] >= obs_1[i][1]  && obs_1[j][1] <= obs_1[i][2]){
+                      if(obs_1[j][2] > obs_1[i][2]){
+                        maxr = obs_1[j][2];
+                        minl = obs_1[i][1];
+                      }
+                      else{
+                        maxr = obs_1[i][2];
+                        minl = obs_1[i][1];
+                      }
+                      cr = obs_1[j][0];   
+                  }
+                  if (obs_1[j][2] >= obs_1[i][1]  && obs_1[j][2] <= obs_1[i][2]){
+                      if(obs_1[j][1] < obs_1[i][1]){
+                        maxr = obs_1[i][2];
+                        minl = obs_1[j][1];
+                      }
+                      else{
+                        maxr = obs_1[i][2];
+                        minl = obs_1[i][1];
+                      }   
+                      cr = obs_1[j][0];   
+                  }            
+              }    
+          }
+          if(cr==0){}
+          else{
+              if(obs_2[(rewriter2-1)*3+0]== cr){
+                  if(obs_2[(rewriter2-1)*3+1]==minl && obs_2[(rewriter2-1)*3+2]==maxr){
                     cr=0;
                     minl=0;
                     maxr=0; 
-                }                
-            }
-        }
-    }     
+                  }
+                  if(obs_2[(rewriter2-1)*3+1]<minl || obs_2[(rewriter2-1)*3+2]>maxr){
+                    cr=0;
+                    minl=0;
+                    maxr=0; 
+                  }
+              }
+              else{
+                obs_2[rewriter2*3+0]=cr;
+                obs_2[rewriter2*3+1]=minl;
+                obs_2[rewriter2*3+2]=maxr;
+                rewriter2 +=1;
+                cr=0;
+                minl=0;
+                maxr=0; 
+              }                
+          }
+      }
+  }
+  rewriter2 = 0;
+
+  for(i=0;i<15;i++)
+    {   
+        printf("obstacle %d %d %d \n",obs_2[i*3+0],obs_2[i*3+1],obs_2[i*3+2]);
+    }  
+  i=0;
 }
 
 int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var){  
