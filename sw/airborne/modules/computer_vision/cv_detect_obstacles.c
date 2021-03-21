@@ -158,11 +158,13 @@ static struct image_t *object_detector(struct image_t *img)
   //       hypotf(x_c, y_c) / hypotf(img->w * 0.5, img->h * 0.5), RadOfDeg(atan2f(y_c, x_c)));
   //VERBOSE_PRINT("check me bitch 2= %d\n", masked_frame_f[50000]);
   //VERBOSE_PRINT("Test if mask frame works = %d", count );
-
+  VERBOSE_PRINT("IM GOING INTO BLACKIE \n");
   getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
+  VERBOSE_PRINT("IM GOING INTO GET OBSTACLES \n");
   getObstacles(black_array, obstacle_array, &process_variables);
+  VERBOSE_PRINT("IM GOING INTO DISTANDHEAD \n");
   distAndHead(obstacle_array, output_array, &process_variables);
-  VERBOSE_PRINT("OUTPUT IS %f", output_array[0][0]);
+  VERBOSE_PRINT("OUTPUT IS %f \n", black_array[0]);
  
   pthread_mutex_lock(&mutex);
   global_filters[0].color_count =count;
@@ -187,6 +189,7 @@ static struct image_t *object_detector(struct image_t *img)
 
 
 int getBlackArray(float threshold, int *maskie, int *blackie, struct process_variables_t *var){
+    VERBOSE_PRINT("IM IN BLACKIE \n");
     int nsectrow = var->nsectrow; 
     int nsectcol = var->nsectcol;
     int npixh = var->npixh;
@@ -197,6 +200,8 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
     float sum_sec_tot = 0; //changed from int
     float average = 0; 
     int countie = 0; 
+    VERBOSE_PRINT("THE VALUE FOR NSECTROW IS %i", nsectrow);
+    VERBOSE_PRINT("I SET ALL THE VALUES CORRECTLY \n");
     //Loops through the cols (so in the rotated pic from up to down)
     for (int i = 0; i < nsectcol; i++){       
         //loops through the rows (so in the rotated pic from left to right)
@@ -217,6 +222,7 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
             // Get full sector
             average = sum_sec_tot/(npixv*npixh);
             //printf("%f",average);
+            VERBOSE_PRINT("COUNTIE IS %i \n", countie);
             if (average<threshold){
                 //NON ROTATED MATRIX
                 //blackie[i*nsectrow+g] = 0;
@@ -251,7 +257,6 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
     int i,j,p,pnew,o,count1;
     int minl,maxr,cr        = 0;
 
-    
         
     for (i=0; i<nsectcol;i++){ 
         for (j=0; j<nsectrow;j++){     
