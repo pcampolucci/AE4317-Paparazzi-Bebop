@@ -39,6 +39,10 @@
 
 
 #define MASK_IT_VERBOSE TRUE
+#define ROW_OBST 50
+#define COL_OBST 3
+#define ROW_OUT 20
+#define COL_OUT 3
 
 #define PRINT(string,...) fprintf(stderr, "[mask_it->%s()] " string,__FUNCTION__ , ##__VA_ARGS__)
 #if MASK_IT_VERBOSE
@@ -64,32 +68,6 @@ uint8_t cod_cr_max = 0;
 
 bool cod_draw = false;
 
-
-#define ROW_OBST 100
-#define COL_OBST 3
-#define HEIGHT_PIX 8  // height is 240 pix
-#define WIDTH_PIX 10  // width is 520 pix
-
-// REFERENCE FRAME: LANDSCAPE PICTURE 
-// ______________________________
-// |                            |
-// |                            |
-// |                            |
-// |                            |
-// ______________________________
-
-int altitude = 1.09100; //meters
-int FOV_horizontal = 110;  // degrees (pls update Alessandro ;))
-int FOV_vertical = 52.3024;  // degrees
-int nsectcol = 5;  // amount of sectors
-int npixh = 2;  // pixels per sector
-int nsectrow = 4;  // amount of sectors
-int npixv = 2; // pixels per sector
-float e = 2.71828;  // the constant
-
-float output_array[ROW_OBST][COL_OBST] = {}; 
-int black_array[HEIGHT_PIX*WIDTH_PIX] = {};
-
 // define global variables
 struct color_object_t {
   int32_t x_c;
@@ -99,12 +77,36 @@ struct color_object_t {
 };
 struct color_object_t global_filters[2];
 
+struct process_variables_t {
+  float FOV_horizontal;
+  float FOV_vertical; 
+  int npixh; 
+  int npixv; 
+  int height_pic;
+  int width_pic;
+  int nsectcol;
+  int nsectrow;
+};
+
+struct process_variables_t process_variables; 
+
+
+int altitude = 1.09100; //meters
+float e = 2.71828;  // the constant
+
+
+
 // Function
 uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
                               uint8_t cb_min, uint8_t cb_max,
                               uint8_t cr_min, uint8_t cr_max, uint32_t *masked_frame2);
 
+int getBlackArray(float threshold, int *maskie, int *blackie, struct process_variables_t *var);
+void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var);
+int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var);
+float distCalc(int nsectors, struct process_variables_t *var);
+int distAndHead(int *obstacle_array, float *input_array, struct process_variables_t *var);
 
 
 static struct image_t *object_detector(struct image_t *img)
@@ -121,28 +123,54 @@ static struct image_t *object_detector(struct image_t *img)
   cr_max = cod_cr_max;
   draw = cod_draw;
   //return img;
+  
+  
+  // Define stuff
+  uint32_t img_w = img->w;
+  uint32_t img_h = img->h; 
 
-
+  uint32_t len_pic = img_w*img_h;
+  uint32_t masked_frame_f[len_pic];
+  memset( masked_frame_f, 0, len_pic*sizeof(uint32_t));
   int32_t x_c, y_c;
 
-  uint32_t lenn = img->w*img->h;
-  uint32_t masked_frame3[lenn] ;
-  memset( masked_frame3, 0, lenn*sizeof(uint32_t) );
-  VERBOSE_PRINT("check me bitch 1= %d\n", masked_frame3[50000]);
+  // Populate struct
+  process_variables.height_pic = img_h;
+  process_variables.width_pic = img_w; 
+  process_variables.npixh = 5;
+  process_variables.npixv = 5;
+  process_variables.nsectcol = img_h/(process_variables.npixh);
+  process_variables.nsectrow = img_w/(process_variables.npixv);
+  process_variables.FOV_horizontal = 110;
+  process_variables.FOV_vertical = 52.3024;
+
+  // Define arrays needed for the processing
+  int black_array[len_pic];
+  int obstacle_array[ROW_OBST][COL_OBST]; 
+  float output_array[ROW_OUT][ROW_OUT];
+  
+  //VERBOSE_PRINT("check me bitch 1= %d\n", masked_frame_f[50000]);
 
   // Filter and find centroid
-  uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame3);
+  uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame_f);
   // VERBOSE_PRINT("Color count %d: %u, threshold %u, x_c %d, y_c %d\n", camera, object_count, count_threshold, x_c, y_c);
   // VERBOSE_PRINT("centroid %d: (%d, %d) r: %4.2f a: %4.2f\n", camera, x_c, y_c,
   //       hypotf(x_c, y_c) / hypotf(img->w * 0.5, img->h * 0.5), RadOfDeg(atan2f(y_c, x_c)));
-  VERBOSE_PRINT("check me bitch 2= %d\n", masked_frame3[50000]);
-  VERBOSE_PRINT("Test if mask frame works = %d", count );
+  //VERBOSE_PRINT("check me bitch 2= %d\n", masked_frame_f[50000]);
+  //VERBOSE_PRINT("Test if mask frame works = %d", count );
+
+  getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
+  getObstacles(black_array, obstacle_array, &process_variables);
+  distAndHead(obstacle_array, output_array, &process_variables);
+  VERBOSE_PRINT("OUTPUT IS %f", output_array[0][0]);
+ 
   pthread_mutex_lock(&mutex);
   global_filters[0].color_count =count;
   global_filters[0].x_c = 0 ;//x_c;
   global_filters[0].y_c = 0 ;//y_c;
   global_filters[0].updated = true;
   pthread_mutex_unlock(&mutex);
+
 
   return img;
 }
@@ -158,43 +186,50 @@ static struct image_t *object_detector(struct image_t *img)
 
 
 
-int getBlackArray(float threshold, int *maskie, int *blackie){
-    int sum_sec_line = 0; 
-    int sum_sec_tot = 0;
+int getBlackArray(float threshold, int *maskie, int *blackie, struct process_variables_t *var){
+    int nsectrow = var->nsectrow; 
+    int nsectcol = var->nsectcol;
+    int npixh = var->npixh;
+    int npixv = var->npixv; 
+    int height_pic = var->height_pic;
+    int width_pic = var->width_pic;
+    float sum_sec_line = 0; //changed from int
+    float sum_sec_tot = 0; //changed from int
     float average = 0; 
     int countie = 0; 
-    // Loops through the sectors from top to bottom
-    for (int g = 0; g < nsectrow; g++){
-        // Loops throught the sectors from left to right
-        printf("New Row ");
-        for (int i = 0; i < nsectcol; i++){
+    //Loops through the cols (so in the rotated pic from up to down)
+    for (int i = 0; i < nsectcol; i++){       
+        //loops through the rows (so in the rotated pic from left to right)
+        for (int g = 0; g < nsectrow; g++){
             sum_sec_tot = 0; 
-            average = 0; 
-            // Loops through the amount of rows of 1 sector
+            average = 0;
+            // Loops through the amount of cols of 1 sector (so in the rotated pic from up to down)            
             for (int j=0; j < npixh; j++){
                 sum_sec_line = 0; 
-                // Loops through the amount of columns of 1 sector
+                // Loops through the amount of rows of 1 sector (so in the rotated pic from left to right)
                 for (int k=0; k < npixv; k++){
-                   // sum_sec_line = sum_sec_line + maskie[k+j*WIDTH_PIX+i*npixv+g*HEIGHT_PIX]; 
-                   sum_sec_line = sum_sec_line + maskie[k+j*HEIGHT_PIX+i*npixv+g*HEIGHT_PIX*npixh]; 
+                   //                                   |RIGHT START              |TRANSLATION WITHIN SECTOR
+                   sum_sec_line = sum_sec_line + maskie[g*npixv+height_pic*i*npixh+k+(j*height_pic)];
                 }
                 sum_sec_tot = sum_sec_tot + sum_sec_line;
-                
             }
+
             // Get full sector
             average = sum_sec_tot/(npixv*npixh);
-            printf("%i ", i);
-            printf("%f \n", average);
+            //printf("%f",average);
             if (average<threshold){
-                blackie[nsectrow-1 + i*nsectrow -g] = 0;
-                printf("%i \n", nsectrow-1 + i*nsectrow -g); 
-                printf("Im in zero \n");
+                //NON ROTATED MATRIX
+                //blackie[i*nsectrow+g] = 0;
+
+                //ROTATED MATRIX
+                blackie[nsectcol*(nsectrow-1-g)+i] = 0;
             }
-            else
-            {
-                blackie[nsectrow-1 + i*nsectrow -g] = 1; 
-                //printf("Im in one \n");
-                printf("%i \n", nsectrow-1 + i*nsectrow -g); 
+            else{
+                //NON ROTATED MATRIX
+                //blackie[i*nsectrow+g] = 1;
+
+                //ROTATED MATRIX
+                blackie[nsectcol*(nsectrow-1-g)+i] = 1;
             }
             countie++; 
         } 
@@ -202,7 +237,13 @@ int getBlackArray(float threshold, int *maskie, int *blackie){
 }
 
 
-int get_obstacles(int nsectcol, int nsectrow, int *black_array, int *obs_2){
+void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var){
+    int nsectrow = var->nsectrow; 
+    int nsectcol = var->nsectcol;
+    int npixh = var->npixh;
+    int npixv = var->npixv; 
+    int height_pic = var->height_pic;
+    int width_pic = var->width_pic;
     int obs_counter         = 0;
     int obs_1[50][3]        ={0};
     // int obs_2[50][3]        ={0};
@@ -304,10 +345,13 @@ int get_obstacles(int nsectcol, int nsectrow, int *black_array, int *obs_2){
     }     
 }
 
-
-
-
-int heading_calc(int l_sec, int r_sec, float *head_array){  
+int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var){  
+    int nsectrow = var->nsectrow; 
+    int nsectcol = var->nsectcol;
+    int npixh = var->npixh;
+    int npixv = var->npixv; 
+    int height_pic = var->height_pic;
+    int width_pic = var->width_pic;
     //convert sectors into pixels
     int l_pixels = (l_sec+1)*npixh;
     int r_pixels = r_sec * npixh;
@@ -315,26 +359,33 @@ int heading_calc(int l_sec, int r_sec, float *head_array){
     float heading_l =0; 
     float heading_r =0; 
 
-    if (l_pixels < (WIDTH_PIX/2)) {
-        heading_l = -factor * (l_pixels - (WIDTH_PIX / 2));
+    if (l_pixels < (width_pic/2)) {
+        heading_l = -factor * (l_pixels - (width_pic / 2));
         head_array[0] = heading_l;
     }
-    else if (l_pixels >= (WIDTH_PIX/2)){
-        heading_l = factor * (l_pixels - (WIDTH_PIX / 2));
+    else if (l_pixels >= (width_pic/2)){
+        heading_l = factor * (l_pixels - (width_pic / 2));
         head_array[0] = heading_l;
     }
-    if (r_pixels < (WIDTH_PIX/2)){
-        heading_r = -factor * (r_pixels - (WIDTH_PIX / 2));
+    if (r_pixels < (width_pic/2)){
+        heading_r = -factor * (r_pixels - (width_pic / 2));
         head_array[1] = heading_r;
     }
-    else if (r_pixels >= (WIDTH_PIX/2)){
-        heading_r = factor * (r_pixels - (WIDTH_PIX / 2));
+    else if (r_pixels >= (width_pic/2)){
+        heading_r = factor * (r_pixels - (width_pic / 2));
         head_array[1] = heading_r;
     }
     return 0; //QUESTION: why return 0??
 }
 
-float distCalc(int nsectors){
+float distCalc(int nsectors, struct process_variables_t *var){
+    int nsectrow = var->nsectrow; 
+    int nsectcol = var->nsectcol;
+    int npixh = var->npixh;
+    int npixv = var->npixv; 
+    int height_pic = var->height_pic;
+    int width_pic = var->width_pic;
+    float FOV_vertical = var->FOV_vertical; 
     int npixels = (nsectrow - 1 - nsectors)*npixv;
     float dist = 0; 
     if (npixels <= 1){
@@ -352,8 +403,14 @@ float distCalc(int nsectors){
     return dist; 
 }
 
-int distAndHead(int *obstacle_array, float *input_array){
+int distAndHead(int *obstacle_array, float *input_array, struct process_variables_t *var){
     // {{0, 0, 0}, {43, 29, 31}, {47, 8, 11}, {0, 0, 0}}
+    int nsectrow = var->nsectrow; 
+    int nsectcol = var->nsectcol;
+    int npixh = var->npixh;
+    int npixv = var->npixv; 
+    int height_pic = var->height_pic;
+    int width_pic = var->width_pic;
     int input_dist = 0;
     int input_headl = 0; 
     int input_headr = 0; 
@@ -370,8 +427,8 @@ int distAndHead(int *obstacle_array, float *input_array){
             break; 
         }
         else{
-            headingCalc(input_headl, input_headr, heading_array);
-            input_array[i] = distCalc(input_dist);
+            headingCalc(input_headl, input_headr, heading_array, &var);
+            input_array[i] = distCalc(input_dist, &var);
             input_array[i+1] = heading_array[0];
             input_array[i+2] = heading_array[1]; 
         }
@@ -382,11 +439,6 @@ int distAndHead(int *obstacle_array, float *input_array){
     }
 
 }
-
-
-
-
-
 
 
 void obstacle_detector_init(void)
