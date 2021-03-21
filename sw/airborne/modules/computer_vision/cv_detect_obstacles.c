@@ -162,12 +162,12 @@ static struct image_t *object_detector(struct image_t *img)
   // VERBOSE_PRINT("IM GOING INTO BLACKIE \n");
   // for (int iii=0;iii<520;iii++){
   //   for(int iv=0;iv<240;iv++){
-  //     VERBOSE_PRINT("%i ",masked_frame_f[iii*240 + iv]);
-  //   }
-  //   VERBOSE_PRINT("\n");
-  // }
-  getBlackArray(0.6, masked_frame_f, black_array, &process_variables);  // Make threshold slider
-  VERBOSE_PRINT("IM GOING INTO GET OBSTACLES \n");
+  //      VERBOSE_PRINT("%i ",masked_frame_f[iii*240 + iv]);
+  //    }
+  //    VERBOSE_PRINT("\n");
+  //  }
+  getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
+  // VERBOSE_PRINT("IM GOING INTO GET OBSTACLES \n");
   // for (int iii=0;iii<process_variables.nsectrow;iii++){
   //   for(int iv=0;iv<process_variables.nsectcol;iv++){
   //     VERBOSE_PRINT("%i ",black_array[iii*process_variables.nsectrow + iv]);
@@ -233,15 +233,14 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
 
             // Get full sector
             average = sum_sec_tot/(npixv*npixh);
-            //printf("%f",average);
-            //VERBOSE_PRINT("AVERAGE IS %f ", average);
+            VERBOSE_PRINT("AVERAGE IS %f \n", average);
             //VERBOSE_PRINT("COUNTIE IS %i \n", countie);
             if (average<threshold){
-                blackie[nsectcol*(nsectrow-1-g)+i] = 1;
+                blackie[nsectcol*(nsectrow-1-g)+i] = 0;
                 //VERBOSE_PRINT("BLACKIE VALUE %i \n",blackie[nsectcol*(nsectrow-1-g)+i] );
             }
             else{
-                blackie[nsectcol*(nsectrow-1-g)+i] = 0;
+                blackie[nsectcol*(nsectrow-1-g)+i] = 1;
                 //VERBOSE_PRINT("BLACKIE VALUE %i \n",blackie[nsectcol*(nsectrow-1-g)+i] );
             }
             countie++; 
@@ -521,7 +520,7 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
         tot_y += y;
         int idx = y * img->w +x;
         //masked_frame[idx] = 1;
-        masked_frame2[idx] = 1;
+        masked_frame2[idx] = 0;  // Changed to zero (white)
         if (draw){
           *yp = 255;  // make pixel brighter in image
           *up = 128;
@@ -531,7 +530,7 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
       }else {
            int idx = y * img->w +x;
            //masked_frame[idx] = 0;
-           masked_frame2[idx] = 0;
+           masked_frame2[idx] = 1;  // Changed to one (black)
           if (draw){
             *yp = 0;
             *up = 128;
