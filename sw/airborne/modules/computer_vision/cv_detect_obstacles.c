@@ -135,18 +135,19 @@ static struct image_t *object_detector(struct image_t *img)
   int32_t x_c, y_c;
 
   // Populate struct
-  process_variables.height_pic = img_h;
-  process_variables.width_pic = img_w; 
+  process_variables.height_pic = img_w;
+  process_variables.width_pic = img_h; 
   process_variables.npixh = 5;
   process_variables.npixv = 5;
-  process_variables.nsectcol = img_h/(process_variables.npixh);
-  process_variables.nsectrow = img_w/(process_variables.npixv);
+  process_variables.nsectcol = img_h/(process_variables.npixv);
+  process_variables.nsectrow = img_w/(process_variables.npixh);
   process_variables.FOV_horizontal = 110;
   process_variables.FOV_vertical = 52.3024;
 
   // Define arrays needed for the processing
   int black_array[len_pic];
   int obstacle_array[ROW_OBST][COL_OBST]; 
+  memset(obstacle_array, 0, ROW_OBST*COL_OBST*sizeof(int));
   float output_array[ROW_OUT][ROW_OUT];
   
   //VERBOSE_PRINT("check me bitch 1= %d\n", masked_frame_f[50000]);
@@ -159,12 +160,13 @@ static struct image_t *object_detector(struct image_t *img)
   //VERBOSE_PRINT("check me bitch 2= %d\n", masked_frame_f[50000]);
   //VERBOSE_PRINT("Test if mask frame works = %d", count );
   VERBOSE_PRINT("IM GOING INTO BLACKIE \n");
-  getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
+  getBlackArray(0.6, masked_frame_f, black_array, &process_variables);  // Make threshold slider
   VERBOSE_PRINT("IM GOING INTO GET OBSTACLES \n");
   getObstacles(black_array, obstacle_array, &process_variables);
+  VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   VERBOSE_PRINT("IM GOING INTO DISTANDHEAD \n");
   distAndHead(obstacle_array, output_array, &process_variables);
-  VERBOSE_PRINT("OUTPUT IS %f \n", black_array[0]);
+  VERBOSE_PRINT("OUTPUT IS %f, %f, %f \n", output_array[0][0], output_array[0][1], output_array[0][2]);
  
   pthread_mutex_lock(&mutex);
   global_filters[0].color_count =count;
@@ -200,8 +202,6 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
     float sum_sec_tot = 0; //changed from int
     float average = 0; 
     int countie = 0; 
-    VERBOSE_PRINT("THE VALUE FOR NSECTROW IS %i", nsectrow);
-    VERBOSE_PRINT("I SET ALL THE VALUES CORRECTLY \n");
     //Loops through the cols (so in the rotated pic from up to down)
     for (int i = 0; i < nsectcol; i++){       
         //loops through the rows (so in the rotated pic from left to right)
@@ -222,20 +222,15 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
             // Get full sector
             average = sum_sec_tot/(npixv*npixh);
             //printf("%f",average);
-            VERBOSE_PRINT("COUNTIE IS %i \n", countie);
+            //VERBOSE_PRINT("AVERAGE IS %f ", average);
+            //VERBOSE_PRINT("COUNTIE IS %i \n", countie);
             if (average<threshold){
-                //NON ROTATED MATRIX
-                //blackie[i*nsectrow+g] = 0;
-
-                //ROTATED MATRIX
                 blackie[nsectcol*(nsectrow-1-g)+i] = 0;
+                //VERBOSE_PRINT("BLACKIE VALUE %i \n",blackie[nsectcol*(nsectrow-1-g)+i] );
             }
             else{
-                //NON ROTATED MATRIX
-                //blackie[i*nsectrow+g] = 1;
-
-                //ROTATED MATRIX
                 blackie[nsectcol*(nsectrow-1-g)+i] = 1;
+                //VERBOSE_PRINT("BLACKIE VALUE %i \n",blackie[nsectcol*(nsectrow-1-g)+i] );
             }
             countie++; 
         } 
@@ -252,12 +247,10 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
     int width_pic = var->width_pic;
     int obs_counter         = 0;
     int obs_1[50][3]        ={0};
-    // int obs_2[50][3]        ={0};
     int rewriter,rewriter2  = 0;
     int i,j,p,pnew,o,count1;
     int minl,maxr,cr        = 0;
 
-        
     for (i=0; i<nsectcol;i++){ 
         for (j=0; j<nsectrow;j++){     
             p       = black_array[i*nsectrow+j];        //check-value of current sector
@@ -324,7 +317,6 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
             if(cr==0){}
             else{
                 if(obs_2[(rewriter2-1)*3+0]== cr){
-                    
                     if(obs_2[(rewriter2-1)*3+1]==minl && obs_2[(rewriter2-1)*3+2]==maxr){
                         cr=0;
                         minl=0;
@@ -392,6 +384,7 @@ float distCalc(int nsectors, struct process_variables_t *var){
     int width_pic = var->width_pic;
     float FOV_vertical = var->FOV_vertical; 
     int npixels = (nsectrow - 1 - nsectors)*npixv;
+    VERBOSE_PRINT("nsectrow is equal toooooo %i \n", nsectrow);
     float dist = 0; 
     if (npixels <= 1){
         dist = 0;
@@ -429,6 +422,9 @@ int distAndHead(int *obstacle_array, float *input_array, struct process_variable
 
         int sum = input_dist + input_headl + input_headr;
         if (sum == 0){
+            input_array[0] = 0;
+            input_array[1] = 0;
+            input_array[2] = 0; 
             break; 
         }
         else{
