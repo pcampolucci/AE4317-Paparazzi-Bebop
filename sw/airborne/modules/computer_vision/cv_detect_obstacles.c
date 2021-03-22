@@ -270,7 +270,7 @@ static struct image_t *object_detector(struct image_t *img)
   getObstacles(black_array, obstacle_array, &process_variables);
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   distAndHead(obstacle_array, output_array, &process_variables);
-  VERBOSE_PRINT("OUTPUT IS %f, %f, %f \n", output_array[0][0], output_array[0][1], output_array[0][2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
+  //VERBOSE_PRINT("OUTPUT IS %f, %f, %f \n", output_array[0][0], output_array[0][1], output_array[0][2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
 
   // update the obstacle message 
   global_obstacle_msg.distance = output_array[0][0];
