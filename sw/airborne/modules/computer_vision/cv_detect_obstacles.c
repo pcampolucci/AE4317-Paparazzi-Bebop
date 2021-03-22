@@ -221,8 +221,10 @@ static struct image_t *object_detector(struct image_t *img)
   //   VERBOSE_PRINT("\n");
   // }
   getObstacles(black_array, obstacle_array, &process_variables);
-  VERBOSE_PRINT("OBSTACLE 1 IS %i, %i, %i \n", obstacle_array[0], obstacle_array[1], obstacle_array[2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
-  VERBOSE_PRINT("OBSTACLE 2 IS %i, %i, %i \n", obstacle_array[3], obstacle_array[4], obstacle_array[5]);
+  for (int i=0 ; i<10; i++){
+    VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
+
+  }
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   distAndHead(obstacle_array, output_array, &process_variables);
   VERBOSE_PRINT("OUTPUT 1 IS %f, %f, %f \n", output_array[0], output_array[1], output_array[2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
@@ -309,7 +311,7 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
   // int width_pic = var->width_pic;
   // int obs_counter         = 0;
   int obs_1[50][3]        ={0};
-  int rewriter =0,rewriter2  = 0;
+  int rewriter = 0,rewriter2  = 1;
   int p,pnew,count1       =0;
   int minl,maxr,cr        = 0;
 
@@ -368,12 +370,12 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
   } 
 
   rewriter = 0;  
-  for(int i=0;i<50;i++)
+  for(int i=0;i<49;i++)
   {            
       if(obs_1[i][0]!=0)
       {   
           
-          for(int j=0+i;j<50;j++)
+          for(int j=i+1;j<50;j++)
           {
               if(obs_1[j][0]>obs_1[i][0])
               {
@@ -390,44 +392,75 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
                   }
                   if (obs_1[j][2] >= obs_1[i][1]  && obs_1[j][2] <= obs_1[i][2]){
                       if(obs_1[j][1] < obs_1[i][1]){
-                        maxr = obs_1[i][2];
-                        minl = obs_1[j][1];
+                          maxr = obs_1[i][2];
+                          minl = obs_1[j][1];
                       }
                       else{
-                        maxr = obs_1[i][2];
-                        minl = obs_1[i][1];
+                          maxr = obs_1[i][2];
+                          minl = obs_1[i][1];
                       }   
                       cr = obs_1[j][0];   
-                  }            
+                  }
+                             
               }    
           }
-          if(cr==0){}
-          else{
-              if(obs_2[(rewriter2-1)*3+0]== cr){
-                  if(obs_2[(rewriter2-1)*3+1]==minl && obs_2[(rewriter2-1)*3+2]==maxr){
-                    cr=0;
-                    minl=0;
-                    maxr=0; 
-                  }
-                  if(obs_2[(rewriter2-1)*3+1]<minl || obs_2[(rewriter2-1)*3+2]>maxr){
-                    cr=0;
-                    minl=0;
-                    maxr=0; 
-                  }
-              }
-              else{
-                obs_2[rewriter2*3+0]=cr;
-                obs_2[rewriter2*3+1]=minl;
-                obs_2[rewriter2*3+2]=maxr;
-                rewriter2 +=1;
-                cr=0;
-                minl=0;
-                maxr=0; 
-              }                
+          // printf("O U T P U T i %i, cr %i, minl %i, maxr %i \n\n",i,cr,minl,maxr);
+          if(obs_2[(rewriter2-1)*3+0]==0){
+            obs_2[rewriter2*3+0]=cr;
+            obs_2[rewriter2*3+1]=minl;
+            obs_2[rewriter2*3+2]=maxr;
+            rewriter2 +=1;
+            cr=0;
+            minl=0;
+            maxr=0; 
           }
+          else{
+              if(obs_2[(rewriter2-1)*3+0]<= cr){
+                  if(obs_2[(rewriter2-1)*3+1]<=minl && obs_2[(rewriter2-1)*3+2]>=maxr){ //inside previous overlap
+                    // cr=0;
+                    // minl=0;
+                    // maxr=0;
+                    // rewriter2 += 1; 
+                    // VERBOSE_PRINT("I am likely fucking us here!!! %i \n", rewriter2);
+                  }
+                  else if(obs_2[(rewriter2-1)*3+1]>minl && obs_2[(rewriter2-1)*3+2]>=maxr &&obs_2[(rewriter2-1)*3+1]<=maxr){ //overlap left
+                    obs_2[(rewriter2-1)*3+0]=cr;
+                    obs_2[(rewriter2-1)*3+1]=minl;
+                    
+                    // VERBOSE_PRINT("increasing left boundary %i \n", rewriter2);
+                    rewriter2 +=1;
+                    cr=0;
+                    minl=0;
+                    maxr=0; 
+                  }
+                  else if (obs_2[(rewriter2-1)*3+1]<=minl && obs_2[(rewriter2-1)*3+2]<maxr && obs_2[(rewriter2-1)*3+2]>=minl) {  //overlapping right
+                    obs_2[(rewriter2-1)*3+0]=cr;
+                    
+                    obs_2[(rewriter2-1)*3+2]=maxr;
+                    // VERBOSE_PRINT("increasing right boundary %i \n", rewriter2);
+                    rewriter2 +=1;
+                    cr=0;
+                    minl=0;
+                    maxr=0; 
+                  } 
+                  else if (obs_2[(rewriter2-1)*3+2]<minl || obs_2[(rewriter2-1)*3+1]<maxr) {  //new or seperate detect ?
+                    obs_2[rewriter2*3+0]=cr;
+                    obs_2[rewriter2*3+1]=minl;
+                    obs_2[rewriter2*3+2]=maxr;
+                    // VERBOSE_PRINT("Adding a new Pole? %i \n", rewriter2);
+                    rewriter2 +=1;
+                    cr=0;
+                    minl=0;
+                    maxr=0; 
+                  }
+                }                 
+              
+                     
+              }
       }
+    //  rewriter2 = 1; 
   }
-  rewriter2 = 0;
+
 
   // this one is causing problems
   // for(int i=0;i<15;i++)
