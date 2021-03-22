@@ -149,7 +149,7 @@ static struct image_t *object_detector(struct image_t *img)
   int obstacle_array[ROW_OBST][COL_OBST]; 
   memset(obstacle_array, 0, ROW_OBST*COL_OBST*sizeof(int));
   float output_array[ROW_OUT][ROW_OUT];
-  
+  memset(output_array, 0, ROW_OUT*COL_OUT*sizeof(float));
   //VERBOSE_PRINT("check me bitch 1= %d\n", masked_frame_f[50000]);
 
   // Filter and find centroid
@@ -176,9 +176,8 @@ static struct image_t *object_detector(struct image_t *img)
   // }
   getObstacles(black_array, obstacle_array, &process_variables);
   VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
-  VERBOSE_PRINT("IM GOING INTO DISTANDHEAD \n");
   distAndHead(obstacle_array, output_array, &process_variables);
-  VERBOSE_PRINT("OUTPUT IS %f, %f, %f \n", output_array[0][0], output_array[0][1], output_array[0][2]);
+  VERBOSE_PRINT("OUTPUT IS %f, %f, %f \n", output_array[0][0], output_array[0][1], output_array[0][2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
  
   pthread_mutex_lock(&mutex);
   global_filters[0].color_count =count;
@@ -203,7 +202,6 @@ static struct image_t *object_detector(struct image_t *img)
 
 
 int getBlackArray(float threshold, int *maskie, int *blackie, struct process_variables_t *var){
-    VERBOSE_PRINT("IM IN BLACKIE \n");
     int nsectrow = var->nsectrow; 
     int nsectcol = var->nsectcol;
     int npixh = var->npixh;
@@ -256,8 +254,8 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
 
 void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
 {
-  int nsectrow = var->nsectrow; 
-  int nsectcol = var->nsectcol;
+  int nsectrow = var->nsectcol; 
+  int nsectcol = var->nsectrow;
   int npixh = var->npixh;
   int npixv = var->npixv; 
   int height_pic = var->height_pic;
@@ -438,7 +436,6 @@ float distCalc(int nsectors, struct process_variables_t *var){
     int width_pic = var->width_pic;
     float FOV_vertical = var->FOV_vertical; 
     int npixels = (nsectrow - 1 - nsectors)*npixv;
-    VERBOSE_PRINT("nsectrow is equal toooooo %i \n", nsectrow);
     float dist = 0; 
     if (npixels <= 1){
         dist = 0;
@@ -473,19 +470,18 @@ int distAndHead(int *obstacle_array, float *input_array, struct process_variable
         input_dist = obstacle_array[i];
         input_headl = obstacle_array[i+1];
         input_headr = obstacle_array[i+2]; 
-
         int sum = input_dist + input_headl + input_headr;
         if (sum == 0){
-            input_array[0] = 0;
-            input_array[1] = 0;
-            input_array[2] = 0; 
             break; 
         }
         else{
-            headingCalc(input_headl, input_headr, heading_array, &var);
-            input_array[i] = distCalc(input_dist, &var);
+            headingCalc(input_headl, input_headr, heading_array, var);
+            input_array[i] = distCalc(input_dist, var);
             input_array[i+1] = heading_array[0];
             input_array[i+2] = heading_array[1]; 
+            VERBOSE_PRINT("output 1: %f \n", input_array[i]);
+            VERBOSE_PRINT("output 2: %f \n", input_array[i+1]);
+            VERBOSE_PRINT("output 3: %f \n", input_array[i+2]);
         }
 
         // get distance 
