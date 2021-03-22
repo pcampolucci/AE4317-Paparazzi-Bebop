@@ -36,8 +36,6 @@
 #include <math.h>
 #include "pthread.h"
 
-
-
 #define MASK_IT_VERBOSE TRUE
 #define ROW_OBST 50
 #define COL_OBST 3
@@ -58,7 +56,6 @@ static pthread_mutex_t mutex;
 #endif
 
 // Filter Settings
-
 uint8_t cod_lum_min = 0;
 uint8_t cod_lum_max = 0;
 uint8_t cod_cb_min = 0;
@@ -66,6 +63,7 @@ uint8_t cod_cb_max = 0;
 uint8_t cod_cr_min = 0;
 uint8_t cod_cr_max = 0;
 
+// Other settings
 bool cod_draw = false;
 
 // define global variables
@@ -75,7 +73,9 @@ struct color_object_t {
   uint32_t color_count;
   bool updated;
 };
+
 struct color_object_t global_filters[2];
+
 
 struct process_variables_t {
   float FOV_horizontal;
@@ -95,8 +95,6 @@ int altitude = 1.09100; //meters
 float e = 2.71828;  // the constant
 
 
-
-// Function
 uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
                               uint8_t cb_min, uint8_t cb_max,
@@ -107,7 +105,6 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
 int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var);
 float distCalc(int nsectors, struct process_variables_t *var);
 int distAndHead(int *obstacle_array, float *input_array, struct process_variables_t *var);
-
 
 static struct image_t *object_detector(struct image_t *img)
 {
@@ -178,7 +175,17 @@ static struct image_t *object_detector(struct image_t *img)
   VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   distAndHead(obstacle_array, output_array, &process_variables);
   VERBOSE_PRINT("OUTPUT IS %f, %f, %f \n", output_array[0][0], output_array[0][1], output_array[0][2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
- 
+
+
+//   int32_t x_c, y_c;
+
+//   uint32_t lenn = img->w*img->h;
+//   uint32_t masked_frame3[lenn] ;
+//   memset( masked_frame3, 0, lenn*sizeof(uint32_t) );
+
+//   // Filter and find centroid
+//   uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame3);
+//   // VERBOSE_PRINT("Test if mask frame works = %d", count );
   pthread_mutex_lock(&mutex);
   global_filters[0].color_count =count;
   global_filters[0].x_c = 0 ;//x_c;
@@ -189,7 +196,6 @@ static struct image_t *object_detector(struct image_t *img)
 
   return img;
 }
-
 
 // struct image_t *object_detector1(struct image_t *img);
 // struct image_t *object_detector1(struct image_t *img)
@@ -491,7 +497,6 @@ int distAndHead(int *obstacle_array, float *input_array, struct process_variable
 
 }
 
-
 void obstacle_detector_init(void)
 {
   memset(global_filters, 0, 2*sizeof(struct color_object_t));
@@ -515,8 +520,15 @@ void obstacle_detector_init(void)
   #endif
 }
 
-
-
+void obstacle_detector_periodic(void)
+{
+  static struct color_object_t local_filters[2];
+  pthread_mutex_lock(&mutex);
+  memcpy(local_filters, global_filters, 2*sizeof(struct color_object_t));
+  pthread_mutex_unlock(&mutex);
+  //VERBOSE_PRINT("Sending obstacle detection\n");
+  AbiSendMsgVISUAL_DETECTION(OBSTACLE_DETECTION_ID, local_filters[0].x_c, local_filters[0].y_c, 0, 0, 4, 0);
+}
 
 uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
@@ -530,9 +542,9 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
   uint32_t tot_y = 0;
   uint8_t *buffer = img->buf;
   int mysize = img->buf_size;//sizeof(img->buf) / sizeof(uint8_t);
-  VERBOSE_PRINT("size of buffer = %d\n",mysize);
-  VERBOSE_PRINT("Image height = %d\n",img->h);
-  VERBOSE_PRINT("Image width = %d\n",img->w);
+  // VERBOSE_PRINT("size of buffer = %d\n",mysize);
+  // VERBOSE_PRINT("Image height = %d\n",img->h);
+  // VERBOSE_PRINT("Image width = %d\n",img->w);
   // Go through all the pixels
   for (uint16_t y = 0; y < img->h; y++) {
     for (uint16_t x = 0; x < img->w; x++) {
@@ -566,7 +578,7 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
           *vp = 128;
         }
               
-      }else {
+      } else {
            int idx = y * img->w +x;
            //masked_frame[idx] = 0;
            masked_frame2[idx] = 1;  // Changed to one (black)
@@ -580,38 +592,15 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
     }
   }
 
-  VERBOSE_PRINT("cnt = %d\n",cnt);
+  //VERBOSE_PRINT("cnt = %d\n",cnt);
   uint32_t summy = 0;
   for (int ica = len-1; ica >= 0; ica--) {
     summy += masked_frame2[ica];
   }
-  //VERBOSE_PRINT("%d/%d/%d\n", masked_frame[50000], masked_frame[100000], masked_frame[len]);
   double percentage;
   double percentage2;
-  //percentage = 100.0*summy/len;
   percentage = 100.0*cnt/len;
   percentage2 = 100.0*summy/len;
-  VERBOSE_PRINT("summy = %d\n",summy);
-  VERBOSE_PRINT("len = %d\n",len);
-  VERBOSE_PRINT("Positive mask = %f \n", percentage);
-  VERBOSE_PRINT("Positive mask 2 = %f \n", percentage2);
-  //printf("%s\n ",masked_frame);
-  //fflush(stdout);
-  VERBOSE_PRINT("MASK HAS BEEN CALCULATED!\n");
-  VERBOSE_PRINT("\n"); 
-  //return *masked_frame;
   return cnt;
 }
 
-
-
-
-void obstacle_detector_periodic(void)
-{
-  static struct color_object_t local_filters[2];
-  pthread_mutex_lock(&mutex);
-  memcpy(local_filters, global_filters, 2*sizeof(struct color_object_t));
-  pthread_mutex_unlock(&mutex);
-  VERBOSE_PRINT("Sending Visual detection\n");
-  AbiSendMsgVISUAL_DETECTION(OBSTACLE_DETECTION_ID, local_filters[0].x_c, local_filters[0].y_c, 0, 0, 4, 0);
-}
