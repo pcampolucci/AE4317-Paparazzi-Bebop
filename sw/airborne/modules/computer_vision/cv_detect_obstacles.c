@@ -342,10 +342,10 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
 
   count1 = 0;
 
-  for(int i=0;i<15;i++)
-    {   
-        printf("obstacle %d %d %d \n",obs_1[i][0],obs_1[i][1],obs_1[i][2]);
-    }  
+  // for(int i=0;i<15;i++)
+  //   {   
+  //       printf("obstacle %d %d %d \n",obs_1[i][0],obs_1[i][1],obs_1[i][2]);
+  //   }  
 
 
   for(int i=0;i<50;i++)
@@ -429,6 +429,7 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
   }
   rewriter2 = 0;
 
+  // this one is causing problems
   for(int i=0;i<15;i++)
     {   
         printf("obstacle %d %d %d \n",obs_2[i*3+0],obs_2[i*3+1],obs_2[i*3+2]);
