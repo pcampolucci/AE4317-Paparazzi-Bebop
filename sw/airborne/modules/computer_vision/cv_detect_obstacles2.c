@@ -104,7 +104,7 @@ float e = 2.71828;  // the constant
 
 
 
-// Function declaration
+// Function
 uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
                               uint8_t cb_min, uint8_t cb_max,
@@ -115,45 +115,8 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
 int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var);
 float distCalc(int nsectors, struct process_variables_t *var);
 int distAndHead(int *obstacle_array, float *input_array, struct process_variables_t *var);
-static struct image_t *object_detector(struct image_t *img);
 
-void obstacle_detector_init(void)
-{
-  memset(global_filters, 0, 2*sizeof(struct color_object_t));
-  pthread_mutex_init(&mutex, NULL);
-  VERBOSE_PRINT("Obstacle detector initialized\n");
 
-  #ifdef OBSTACLE_DETECTOR_CAMERA
-    #ifdef OBSTACLE_DETECTOR_LUM_MIN
-      cod_lum_min = OBSTACLE_DETECTOR_LUM_MIN;
-      cod_lum_max = OBSTACLE_DETECTOR_LUM_MAX;
-      cod_cb_min = OBSTACLE_DETECTOR_CB_MIN;
-      cod_cb_max = OBSTACLE_DETECTOR_CB_MAX;
-      cod_cr_min = OBSTACLE_DETECTOR_CR_MIN;
-      cod_cr_max = OBSTACLE_DETECTOR_CR_MAX;
-    #endif
-    #ifdef OBSTACLE_DETECTOR_DRAW
-      cod_draw = OBSTACLE_DETECTOR_DRAW;
-    #endif
-    //cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, object_detector, OBSTACLE_DETECTOR_FPS);
-    cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, object_detector, OBSTACLE_DETECTOR_FPS);
-  #endif
-}
-
-void obstacle_detector_periodic(void)
-{
-  static struct color_object_t local_filters[2];
-  pthread_mutex_lock(&mutex);
-  memcpy(local_filters, global_filters, 2*sizeof(struct color_object_t));
-  pthread_mutex_unlock(&mutex);
-  AbiSendMsgOBSTACLE_DETECTION(OBSTACLE_DETECTION_ID, global_obstacle_msg.distance,
-                                                      global_obstacle_msg.left_heading, 
-                                                      global_obstacle_msg.right_heading);
-}
-
-/*
- * Function description
- */
 static struct image_t *object_detector(struct image_t *img)
 {
   uint8_t lum_min, lum_max;
@@ -222,8 +185,8 @@ static struct image_t *object_detector(struct image_t *img)
   getObstacles(black_array, obstacle_array, &process_variables);
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   distAndHead(obstacle_array, output_array, &process_variables);
-  // VERBOSE_PRINT("OUTPUT IS %f, %f, %f \n", output_array[0][0], output_array[0][1], output_array[0][2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
-
+  VERBOSE_PRINT("OUTPUT IS %f, %f, %f \n", output_array[0][0], output_array[0][1], output_array[0][2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
+ 
   // update the obstacle message 
   global_obstacle_msg.distance = output_array[0][0];
   global_obstacle_msg.left_heading = output_array[0][1];
@@ -240,9 +203,17 @@ static struct image_t *object_detector(struct image_t *img)
   return img;
 }
 
-/*
- * Function description
- */
+
+// struct image_t *object_detector1(struct image_t *img);
+// struct image_t *object_detector1(struct image_t *img)
+// {
+//   return object_detector(img);
+// }
+
+//cancelled call for object dector 1 and 2 as we do not have a switch anymore
+
+
+
 int getBlackArray(float threshold, int *maskie, int *blackie, struct process_variables_t *var){
     int nsectrow = var->nsectrow; 
     int nsectcol = var->nsectcol;
@@ -293,9 +264,7 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
     }   
 }
 
-/*
- * Function description
- */
+
 void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
 {
   int nsectrow = var->nsectcol; 
@@ -307,22 +276,23 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
   int obs_counter         = 0;
   int obs_1[50][3]        ={0};
   int rewriter,rewriter2  = 0;
-  int p,pnew,o,count1;
+  int i,j,p,pnew,o,count1;
   int minl,maxr,cr        = 0;
 
-  for(int i=0;i<50;i++)
+  for(i=0;i<50;i++)
     {   
     obs_2[i*3+0]=0  ;
     obs_2[i*3+1]=0  ;
     obs_2[i*3+2]=0  ;
     }  
     
+  i=0;
 
 
   
-  for (int i=0; i<nsectcol;i++)
+  for (i=0; i<nsectcol;i++)
   { 
-      for (int j=0; j<nsectrow;j++)
+      for (j=0; j<nsectrow;j++)
       {     
         p       = black_array[i*nsectrow+j];        //check-value of current sector
         pnew    = black_array[i*nsectrow+j+1];      //cehck-value of following sector
@@ -342,13 +312,14 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
 
   count1 = 0;
 
-  for(int i=0;i<15;i++)
-    {   
-        printf("obstacle %d %d %d \n",obs_1[i][0],obs_1[i][1],obs_1[i][2]);
-    }  
+  // for(i=0;i<15;i++)
+  //   {   
+  //       printf("obstacle %d %d %d \n",obs_1[i][0],obs_1[i][1],obs_1[i][2]);
+  //   }  
+  // i=0;
 
 
-  for(int i=0;i<50;i++)
+  for(i=0;i<50;i++)
   {
   
       if (obs_1[i][0]==0 || obs_1[i][1]==0 || obs_1[i][2]==0){
@@ -368,12 +339,12 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
   } 
 
   rewriter = 0;  
-  for(int i=0;i<50;i++)
+  for(i=0;i<50;i++)
   {            
       if(obs_1[i][0]!=0)
       {   
           
-          for(int j=0+i;j<50;j++)
+          for(j=0+i;j<50;j++)
           {
               if(obs_1[j][0]>obs_1[i][0])
               {
@@ -429,15 +400,13 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
   }
   rewriter2 = 0;
 
-  for(int i=0;i<15;i++)
-    {   
-        printf("obstacle %d %d %d \n",obs_2[i*3+0],obs_2[i*3+1],obs_2[i*3+2]);
-    }  
+  // for(i=0;i<15;i++)
+  //   {   
+  //       printf("obstacle %d %d %d \n",obs_2[i*3+0],obs_2[i*3+1],obs_2[i*3+2]);
+  //   }  
+  // i=0;
 }
 
-/*
- * Function description
- */
 int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var){  
     int nsectrow = var->nsectrow; 
     int nsectcol = var->nsectcol;
@@ -471,9 +440,6 @@ int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variable
     return 0; //QUESTION: why return 0??
 }
 
-/*
- * Function description
- */
 float distCalc(int nsectors, struct process_variables_t *var){
     int nsectrow = var->nsectrow; 
     int nsectcol = var->nsectcol;
@@ -499,9 +465,6 @@ float distCalc(int nsectors, struct process_variables_t *var){
     return dist; 
 }
 
-/*
- * Function description
- */
 int distAndHead(int *obstacle_array, float *input_array, struct process_variables_t *var){
     // {{0, 0, 0}, {43, 29, 31}, {47, 8, 11}, {0, 0, 0}}
     int nsectrow = var->nsectrow; 
@@ -529,16 +492,45 @@ int distAndHead(int *obstacle_array, float *input_array, struct process_variable
             input_array[i] = distCalc(input_dist, var);
             input_array[i+1] = heading_array[0];
             input_array[i+2] = heading_array[1]; 
-            // VERBOSE_PRINT("output 1: %f \n", input_array[i]);
-            // VERBOSE_PRINT("output 2: %f \n", input_array[i+1]);
-            // VERBOSE_PRINT("output 3: %f \n", input_array[i+2]);
+            VERBOSE_PRINT("output 1: %f \n", input_array[i]);
+            VERBOSE_PRINT("output 2: %f \n", input_array[i+1]);
+            VERBOSE_PRINT("output 3: %f \n", input_array[i+2]);
         }
+
+        // get distance 
+
+        // get heading
     }
+
 }
 
-/*
- * Function description
- */
+
+void obstacle_detector_init(void)
+{
+  memset(global_filters, 0, 2*sizeof(struct color_object_t));
+  pthread_mutex_init(&mutex, NULL);
+  VERBOSE_PRINT("Obstacle detector initialized\n");
+
+  #ifdef OBSTACLE_DETECTOR_CAMERA
+    #ifdef OBSTACLE_DETECTOR_LUM_MIN
+      cod_lum_min = OBSTACLE_DETECTOR_LUM_MIN;
+      cod_lum_max = OBSTACLE_DETECTOR_LUM_MAX;
+      cod_cb_min = OBSTACLE_DETECTOR_CB_MIN;
+      cod_cb_max = OBSTACLE_DETECTOR_CB_MAX;
+      cod_cr_min = OBSTACLE_DETECTOR_CR_MIN;
+      cod_cr_max = OBSTACLE_DETECTOR_CR_MAX;
+    #endif
+    #ifdef OBSTACLE_DETECTOR_DRAW
+      cod_draw = OBSTACLE_DETECTOR_DRAW;
+    #endif
+    //cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, object_detector, OBSTACLE_DETECTOR_FPS);
+    cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, object_detector, OBSTACLE_DETECTOR_FPS);
+  #endif
+}
+
+
+
+
 uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
                               uint8_t cb_min, uint8_t cb_max,
@@ -624,3 +616,16 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
   return cnt;
 }
 
+
+
+
+void obstacle_detector_periodic(void)
+{
+  static struct color_object_t local_filters[2];
+  pthread_mutex_lock(&mutex);
+  memcpy(local_filters, global_filters, 2*sizeof(struct color_object_t));
+  pthread_mutex_unlock(&mutex);
+  AbiSendMsgOBSTACLE_DETECTION(OBSTACLE_DETECTION_ID, global_obstacle_msg.distance,
+                                                      global_obstacle_msg.left_heading, 
+                                                      global_obstacle_msg.right_heading);
+}
