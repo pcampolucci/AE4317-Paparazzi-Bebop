@@ -37,6 +37,10 @@
 #include "pthread.h"
 
 #define MASK_IT_VERBOSE TRUE
+#define ROW_OBST 50
+#define COL_OBST 3
+#define ROW_OUT 20
+#define COL_OUT 3
 
 #define PRINT(string,...) fprintf(stderr, "[mask_it->%s()] " string,__FUNCTION__ , ##__VA_ARGS__)
 #if MASK_IT_VERBOSE
@@ -72,12 +76,35 @@ struct color_object_t {
 
 struct color_object_t global_filters[2];
 
-// Declare functions
+
+struct process_variables_t {
+  float FOV_horizontal;
+  float FOV_vertical; 
+  int npixh; 
+  int npixv; 
+  int height_pic;
+  int width_pic;
+  int nsectcol;
+  int nsectrow;
+};
+
+struct process_variables_t process_variables; 
+
+
+int altitude = 1.09100; //meters
+float e = 2.71828;  // the constant
+
+
 uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
                               uint8_t cb_min, uint8_t cb_max,
                               uint8_t cr_min, uint8_t cr_max, uint32_t *masked_frame2);
 
+int getBlackArray(float threshold, int *maskie, int *blackie, struct process_variables_t *var);
+void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var);
+int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var);
+float distCalc(int nsectors, struct process_variables_t *var);
+int distAndHead(int *obstacle_array, float *input_array, struct process_variables_t *var);
 
 static struct image_t *object_detector(struct image_t *img)
 {
@@ -92,16 +119,73 @@ static struct image_t *object_detector(struct image_t *img)
   cr_min = cod_cr_min;
   cr_max = cod_cr_max;
   draw = cod_draw;
+  //return img;
+  
+  
+  // Define stuff
+  uint32_t img_w = img->w;
+  uint32_t img_h = img->h; 
 
+  uint32_t len_pic = img_w*img_h;
+  uint32_t masked_frame_f[len_pic];
+  memset( masked_frame_f, 0, len_pic*sizeof(uint32_t));
   int32_t x_c, y_c;
 
-  uint32_t lenn = img->w*img->h;
-  uint32_t masked_frame3[lenn] ;
-  memset( masked_frame3, 0, lenn*sizeof(uint32_t) );
+  // Populate struct
+  process_variables.height_pic = img_w;
+  process_variables.width_pic = img_h; 
+  process_variables.npixh = 5;
+  process_variables.npixv = 5;
+  process_variables.nsectcol = img_h/(process_variables.npixv);
+  process_variables.nsectrow = img_w/(process_variables.npixh);
+  process_variables.FOV_horizontal = 110;
+  process_variables.FOV_vertical = 52.3024;
+
+  // Define arrays needed for the processing
+  int black_array[len_pic];
+  int obstacle_array[ROW_OBST][COL_OBST]; 
+  memset(obstacle_array, 0, ROW_OBST*COL_OBST*sizeof(int));
+  float output_array[ROW_OUT][ROW_OUT];
+  memset(output_array, 0, ROW_OUT*COL_OUT*sizeof(float));
+  //VERBOSE_PRINT("check me bitch 1= %d\n", masked_frame_f[50000]);
 
   // Filter and find centroid
-  uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame3);
-  // VERBOSE_PRINT("Test if mask frame works = %d", count );
+  uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame_f);
+  // VERBOSE_PRINT("Color count %d: %u, threshold %u, x_c %d, y_c %d\n", camera, object_count, count_threshold, x_c, y_c);
+  // VERBOSE_PRINT("centroid %d: (%d, %d) r: %4.2f a: %4.2f\n", camera, x_c, y_c,
+  //       hypotf(x_c, y_c) / hypotf(img->w * 0.5, img->h * 0.5), RadOfDeg(atan2f(y_c, x_c)));
+  //VERBOSE_PRINT("check me bitch 2= %d\n", masked_frame_f[50000]);
+  //VERBOSE_PRINT("Test if mask frame works = %d", count );
+  // VERBOSE_PRINT("IM GOING INTO BLACKIE \n");
+  // for (int iii=0;iii<520;iii++){
+  //   for(int iv=0;iv<240;iv++){
+  //      VERBOSE_PRINT("%i ",masked_frame_f[iii*240 + iv]);
+  //    }
+  //    VERBOSE_PRINT("\n");
+  //  }
+  getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
+  
+  // for (int iii=0;iii<process_variables.nsectrow;iii++){
+  //   for(int iv=0;iv<process_variables.nsectcol;iv++){
+  //     VERBOSE_PRINT("%i ",black_array[iii*process_variables.nsectcol + iv]);
+  //   }
+  //   VERBOSE_PRINT("\n");
+  // }
+  getObstacles(black_array, obstacle_array, &process_variables);
+  VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
+  distAndHead(obstacle_array, output_array, &process_variables);
+  VERBOSE_PRINT("OUTPUT IS %f, %f, %f \n", output_array[0][0], output_array[0][1], output_array[0][2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
+
+
+//   int32_t x_c, y_c;
+
+//   uint32_t lenn = img->w*img->h;
+//   uint32_t masked_frame3[lenn] ;
+//   memset( masked_frame3, 0, lenn*sizeof(uint32_t) );
+
+//   // Filter and find centroid
+//   uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame3);
+//   // VERBOSE_PRINT("Test if mask frame works = %d", count );
   pthread_mutex_lock(&mutex);
   global_filters[0].color_count =count;
   global_filters[0].x_c = 0 ;//x_c;
@@ -109,7 +193,308 @@ static struct image_t *object_detector(struct image_t *img)
   global_filters[0].updated = true;
   pthread_mutex_unlock(&mutex);
 
+
   return img;
+}
+
+// struct image_t *object_detector1(struct image_t *img);
+// struct image_t *object_detector1(struct image_t *img)
+// {
+//   return object_detector(img);
+// }
+
+//cancelled call for object dector 1 and 2 as we do not have a switch anymore
+
+
+
+int getBlackArray(float threshold, int *maskie, int *blackie, struct process_variables_t *var){
+    int nsectrow = var->nsectrow; 
+    int nsectcol = var->nsectcol;
+    int npixh = var->npixh;
+    int npixv = var->npixv; 
+    int height_pic = var->height_pic;
+    int width_pic = var->width_pic;
+    float sum_sec_line = 0; //changed from int
+    float sum_sec_tot = 0; //changed from int
+    float average = 0; 
+    int countie = 0; 
+    //Loops through the cols (so in the rotated pic from up to down)
+    for (int i = 0; i < nsectcol; i++){       
+        //loops through the rows (so in the rotated pic from left to right)
+        for (int g = 0; g < nsectrow; g++){
+            sum_sec_tot = 0; 
+            average = 0;
+            // Loops through the amount of cols of 1 sector (so in the rotated pic from up to down)            
+            for (int j=0; j < npixh; j++){
+                sum_sec_line = 0; 
+                // Loops through the amount of rows of 1 sector (so in the rotated pic from left to right)
+                for (int k=0; k < npixv; k++){
+                   //                                   |RIGHT START              |TRANSLATION WITHIN SECTOR
+                   sum_sec_line = sum_sec_line + maskie[g*npixv+height_pic*i*npixh+k+(j*height_pic)];
+                }
+                sum_sec_tot = sum_sec_tot + sum_sec_line;
+            }
+
+            // Get full sector
+            average = sum_sec_tot/(npixv*npixh);
+            //VERBOSE_PRINT("AVERAGE IS %f \n", average);
+            //VERBOSE_PRINT("COUNTIE IS %i \n", countie);
+            //VERBOSE_PRINT("%f \n", threshold);
+            if (average<threshold){
+                blackie[nsectcol*(nsectrow-1-g)+i] = 0;
+                //VERBOSE_PRINT("HALLO I AM ZERO ");
+                //VERBOSE_PRINT("%i \n", nsectcol*(nsectrow-1-g)+i);
+                //VERBOSE_PRINT("BLACKIE VALUE %i \n",blackie[nsectcol*(nsectrow-1-g)+i] );
+            }
+            else{
+                blackie[nsectcol*(nsectrow-1-g)+i] = 1;
+                //VERBOSE_PRINT("HALLO I AM ONEEEE ");
+                //VERBOSE_PRINT("%i \n", nsectcol*(nsectrow-1-g)+i);
+                //VERBOSE_PRINT("BLACKIE VALUE %i \n",blackie[nsectcol*(nsectrow-1-g)+i] );
+            }
+            countie++; 
+        } 
+    }   
+}
+
+
+void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
+{
+  int nsectrow = var->nsectcol; 
+  int nsectcol = var->nsectrow;
+  int npixh = var->npixh;
+  int npixv = var->npixv; 
+  int height_pic = var->height_pic;
+  int width_pic = var->width_pic;
+  int obs_counter         = 0;
+  int obs_1[50][3]        ={0};
+  int rewriter,rewriter2  = 0;
+  int i,j,p,pnew,o,count1;
+  int minl,maxr,cr        = 0;
+
+  for(i=0;i<50;i++)
+    {   
+    obs_2[i*3+0]=0  ;
+    obs_2[i*3+1]=0  ;
+    obs_2[i*3+2]=0  ;
+    }  
+    
+  i=0;
+
+
+  
+  for (i=0; i<nsectcol;i++)
+  { 
+      for (j=0; j<nsectrow;j++)
+      {     
+        p       = black_array[i*nsectrow+j];        //check-value of current sector
+        pnew    = black_array[i*nsectrow+j+1];      //cehck-value of following sector
+        if (p - pnew < 0 && j<nsectrow-1){          //activate on white-to-black step, accounting for counter  
+
+          obs_1[count1][1]=j+1;
+          obs_1[count1][0]=i;
+          count1 +=1;   
+        } 
+        if (p - pnew == 1 && j<nsectrow-1 && obs_1[count1-1][1]<=j+1 && obs_1[count1-1][1]!=0){
+          obs_1[count1-1][2]=j+1; 
+        }
+        // VERBOSE_PRINT("Adding detection \n");  
+      }
+      
+  }
+
+  count1 = 0;
+
+  for(i=0;i<15;i++)
+    {   
+        printf("obstacle %d %d %d \n",obs_1[i][0],obs_1[i][1],obs_1[i][2]);
+    }  
+  i=0;
+
+
+  for(i=0;i<50;i++)
+  {
+  
+      if (obs_1[i][0]==0 || obs_1[i][1]==0 || obs_1[i][2]==0){
+        obs_1[i][0]=0;
+        obs_1[i][1]=0;
+        obs_1[i][2]=0;
+      }
+      else{                      
+        obs_1[rewriter][0] =  obs_1[i][0];
+        obs_1[rewriter][1] =  obs_1[i][1];
+        obs_1[rewriter][2] =  obs_1[i][2];
+        obs_1[i][0]=0;
+        obs_1[i][1]=0;
+        obs_1[i][2]=0;
+        rewriter +=1;
+      }
+  } 
+
+  rewriter = 0;  
+  for(i=0;i<50;i++)
+  {            
+      if(obs_1[i][0]!=0)
+      {   
+          
+          for(j=0+i;j<50;j++)
+          {
+              if(obs_1[j][0]>obs_1[i][0])
+              {
+                  if (obs_1[j][1] >= obs_1[i][1]  && obs_1[j][1] <= obs_1[i][2]){
+                      if(obs_1[j][2] > obs_1[i][2]){
+                        maxr = obs_1[j][2];
+                        minl = obs_1[i][1];
+                      }
+                      else{
+                        maxr = obs_1[i][2];
+                        minl = obs_1[i][1];
+                      }
+                      cr = obs_1[j][0];   
+                  }
+                  if (obs_1[j][2] >= obs_1[i][1]  && obs_1[j][2] <= obs_1[i][2]){
+                      if(obs_1[j][1] < obs_1[i][1]){
+                        maxr = obs_1[i][2];
+                        minl = obs_1[j][1];
+                      }
+                      else{
+                        maxr = obs_1[i][2];
+                        minl = obs_1[i][1];
+                      }   
+                      cr = obs_1[j][0];   
+                  }            
+              }    
+          }
+          if(cr==0){}
+          else{
+              if(obs_2[(rewriter2-1)*3+0]== cr){
+                  if(obs_2[(rewriter2-1)*3+1]==minl && obs_2[(rewriter2-1)*3+2]==maxr){
+                    cr=0;
+                    minl=0;
+                    maxr=0; 
+                  }
+                  if(obs_2[(rewriter2-1)*3+1]<minl || obs_2[(rewriter2-1)*3+2]>maxr){
+                    cr=0;
+                    minl=0;
+                    maxr=0; 
+                  }
+              }
+              else{
+                obs_2[rewriter2*3+0]=cr;
+                obs_2[rewriter2*3+1]=minl;
+                obs_2[rewriter2*3+2]=maxr;
+                rewriter2 +=1;
+                cr=0;
+                minl=0;
+                maxr=0; 
+              }                
+          }
+      }
+  }
+  rewriter2 = 0;
+
+  for(i=0;i<15;i++)
+    {   
+        printf("obstacle %d %d %d \n",obs_2[i*3+0],obs_2[i*3+1],obs_2[i*3+2]);
+    }  
+  i=0;
+}
+
+int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var){  
+    int nsectrow = var->nsectrow; 
+    int nsectcol = var->nsectcol;
+    int npixh = var->npixh;
+    int npixv = var->npixv; 
+    int height_pic = var->height_pic;
+    int width_pic = var->width_pic;
+    //convert sectors into pixels
+    int l_pixels = (l_sec+1)*npixh;
+    int r_pixels = r_sec * npixh;
+    float factor = 0.2023;
+    float heading_l =0; 
+    float heading_r =0; 
+
+    if (l_pixels < (width_pic/2)) {
+        heading_l = -factor * (l_pixels - (width_pic / 2));
+        head_array[0] = heading_l;
+    }
+    else if (l_pixels >= (width_pic/2)){
+        heading_l = factor * (l_pixels - (width_pic / 2));
+        head_array[0] = heading_l;
+    }
+    if (r_pixels < (width_pic/2)){
+        heading_r = -factor * (r_pixels - (width_pic / 2));
+        head_array[1] = heading_r;
+    }
+    else if (r_pixels >= (width_pic/2)){
+        heading_r = factor * (r_pixels - (width_pic / 2));
+        head_array[1] = heading_r;
+    }
+    return 0; //QUESTION: why return 0??
+}
+
+float distCalc(int nsectors, struct process_variables_t *var){
+    int nsectrow = var->nsectrow; 
+    int nsectcol = var->nsectcol;
+    int npixh = var->npixh;
+    int npixv = var->npixv; 
+    int height_pic = var->height_pic;
+    int width_pic = var->width_pic;
+    float FOV_vertical = var->FOV_vertical; 
+    int npixels = (nsectrow - 1 - nsectors)*npixv;
+    float dist = 0; 
+    if (npixels <= 1){
+        dist = 0;
+    }
+    else if (npixels < 10){
+        dist = (1/(pow(0.45,(npixels/43))))-1 + altitude/tan((FOV_vertical/2)/57.2958);
+    }
+    else if (npixels < 200){
+        dist = 0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels))) + altitude/tan((FOV_vertical/2)/57.2958);
+    }
+    else{
+        dist = 1000; 
+    }
+    return dist; 
+}
+
+int distAndHead(int *obstacle_array, float *input_array, struct process_variables_t *var){
+    // {{0, 0, 0}, {43, 29, 31}, {47, 8, 11}, {0, 0, 0}}
+    int nsectrow = var->nsectrow; 
+    int nsectcol = var->nsectcol;
+    int npixh = var->npixh;
+    int npixv = var->npixv; 
+    int height_pic = var->height_pic;
+    int width_pic = var->width_pic;
+    int input_dist = 0;
+    int input_headl = 0; 
+    int input_headr = 0; 
+    float heading_array[2] = {};
+
+    for(int i=0; i < COL_OBST*ROW_OBST; i=i+3){
+        // check for zeros 
+        input_dist = obstacle_array[i];
+        input_headl = obstacle_array[i+1];
+        input_headr = obstacle_array[i+2]; 
+        int sum = input_dist + input_headl + input_headr;
+        if (sum == 0){
+            break; 
+        }
+        else{
+            headingCalc(input_headl, input_headr, heading_array, var);
+            input_array[i] = distCalc(input_dist, var);
+            input_array[i+1] = heading_array[0];
+            input_array[i+2] = heading_array[1]; 
+            VERBOSE_PRINT("output 1: %f \n", input_array[i]);
+            VERBOSE_PRINT("output 2: %f \n", input_array[i+1]);
+            VERBOSE_PRINT("output 3: %f \n", input_array[i+2]);
+        }
+
+        // get distance 
+
+        // get heading
+    }
+
 }
 
 void obstacle_detector_init(void)
@@ -186,7 +571,7 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
         tot_y += y;
         int idx = y * img->w +x;
         //masked_frame[idx] = 1;
-        masked_frame2[idx] = 1;
+        masked_frame2[idx] = 0;  // Changed to zero (white)
         if (draw){
           *yp = 255;  // make pixel brighter in image
           *up = 128;
@@ -196,7 +581,7 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
       } else {
            int idx = y * img->w +x;
            //masked_frame[idx] = 0;
-           masked_frame2[idx] = 0;
+           masked_frame2[idx] = 1;  // Changed to one (black)
           if (draw){
             *yp = 0;
             *up = 128;
