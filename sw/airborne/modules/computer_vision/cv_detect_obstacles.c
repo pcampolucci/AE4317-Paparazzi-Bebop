@@ -36,6 +36,7 @@
 #include <math.h>
 #include "pthread.h"
 
+// Default constants
 #define MASK_IT_VERBOSE TRUE
 #define ROW_OBST 50
 #define COL_OBST 3
@@ -76,7 +77,6 @@ struct color_object_t {
 
 struct color_object_t global_filters[2];
 
-
 struct process_variables_t {
   float FOV_horizontal;
   float FOV_vertical; 
@@ -90,22 +90,136 @@ struct process_variables_t {
 
 struct process_variables_t process_variables; 
 
+struct obstacle_message_t {
+  float distance;
+  float left_heading;
+  float right_heading;
+};
 
-int altitude = 1.09100; //meters
-float e = 2.71828;  // the constant
+struct obstacle_message_t global_obstacle_msg;
 
 
-uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
-                              uint8_t lum_min, uint8_t lum_max,
-                              uint8_t cb_min, uint8_t cb_max,
-                              uint8_t cr_min, uint8_t cr_max, uint32_t *masked_frame2);
+int altitude = 1.09100;  //meters
+float e = 2.71828;       // the constant
 
+uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw, uint8_t lum_min, uint8_t lum_max, uint8_t cb_min, uint8_t cb_max, uint8_t cr_min, uint8_t cr_max, uint32_t *masked_frame2);
 int getBlackArray(float threshold, int *maskie, int *blackie, struct process_variables_t *var);
 void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var);
 int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var);
 float distCalc(int nsectors, struct process_variables_t *var);
 int distAndHead(int *obstacle_array, float *input_array, struct process_variables_t *var);
+static struct image_t *object_detector(struct image_t *img);
 
+/*
+ * Initialization function
+ */
+void obstacle_detector_init(void)
+{
+  memset(global_filters, 0, 2*sizeof(struct color_object_t));
+  pthread_mutex_init(&mutex, NULL);
+  VERBOSE_PRINT("Obstacle detector initialized\n");
+
+  #ifdef OBSTACLE_DETECTOR_CAMERA
+    #ifdef OBSTACLE_DETECTOR_LUM_MIN
+      cod_lum_min = OBSTACLE_DETECTOR_LUM_MIN;
+      cod_lum_max = OBSTACLE_DETECTOR_LUM_MAX;
+      cod_cb_min = OBSTACLE_DETECTOR_CB_MIN;
+      cod_cb_max = OBSTACLE_DETECTOR_CB_MAX;
+      cod_cr_min = OBSTACLE_DETECTOR_CR_MIN;
+      cod_cr_max = OBSTACLE_DETECTOR_CR_MAX;
+    #endif
+    #ifdef OBSTACLE_DETECTOR_DRAW
+      cod_draw = OBSTACLE_DETECTOR_DRAW;
+    #endif
+    //cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, object_detector, OBSTACLE_DETECTOR_FPS);
+    cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, object_detector, OBSTACLE_DETECTOR_FPS);
+  #endif
+}
+
+/*
+ * Periodic Function
+ */
+void obstacle_detector_periodic(void)
+{
+  static struct color_object_t local_filters[2];
+  pthread_mutex_lock(&mutex);
+  memcpy(local_filters, global_filters, 2*sizeof(struct color_object_t));
+  pthread_mutex_unlock(&mutex);
+  AbiSendMsgOBSTACLE_DETECTION(OBSTACLE_DETECTION_ID, global_obstacle_msg.distance,
+                                                      global_obstacle_msg.left_heading, 
+                                                      global_obstacle_msg.right_heading);
+}
+
+/*
+ * Get the ground mask for obstacle extraction
+ */
+uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
+                              uint8_t lum_min, uint8_t lum_max,
+                              uint8_t cb_min, uint8_t cb_max,
+                              uint8_t cr_min, uint8_t cr_max, uint32_t *masked_frame2)
+{
+  uint32_t cnt = 0;
+  uint32_t len = img->h*img->w;
+  uint32_t tot_x = 0;
+  uint32_t tot_y = 0;
+  uint8_t *buffer = img->buf;
+  int mysize = img->buf_size;
+  // Go through all the pixels
+  for (uint16_t y = 0; y < img->h; y++) {
+    for (uint16_t x = 0; x < img->w; x++) {
+      // Check if the color is inside the specified values
+      uint8_t *yp, *up, *vp;
+      if (x % 2 == 0) {
+        // Even x
+        up = &buffer[y * 2 * img->w + 2 * x];      // U
+        yp = &buffer[y * 2 * img->w + 2 * x + 1];  // Y1
+        vp = &buffer[y * 2 * img->w + 2 * x + 2];  // V
+      } else {
+        // Uneven x
+        up = &buffer[y * 2 * img->w + 2 * x - 2];  // U
+        vp = &buffer[y * 2 * img->w + 2 * x];      // V
+        yp = &buffer[y * 2 * img->w + 2 * x + 1];  // Y2
+      }
+      if ( (*yp >= lum_min) && (*yp <= lum_max) &&
+           (*up >= cb_min ) && (*up <= cb_max ) &&
+           (*vp >= cr_min ) && (*vp <= cr_max )) {
+        cnt ++;
+        tot_x += x;
+        tot_y += y;
+        int idx = y * img->w +x;
+        masked_frame2[idx] = 0;  // Changed to zero (white)
+        if (draw){
+          *yp = 255;  // make pixel brighter in image
+          *up = 128;
+          *vp = 128;
+        }
+              
+      } else {
+           int idx = y * img->w +x;
+           masked_frame2[idx] = 1;  // Changed to one (black)
+          if (draw){
+            *yp = 0;
+            *up = 128;
+            *vp = 128;
+          }
+      }
+    }
+  }
+
+  uint32_t summy = 0;
+  for (int ica = len-1; ica >= 0; ica--) {
+    summy += masked_frame2[ica];
+  }
+  double percentage;
+  double percentage2;
+  percentage = 100.0*cnt/len;
+  percentage2 = 100.0*summy/len;
+  return cnt;
+}
+
+/*
+ * Caller for the image 
+ */
 static struct image_t *object_detector(struct image_t *img)
 {
   uint8_t lum_min, lum_max;
@@ -120,7 +234,6 @@ static struct image_t *object_detector(struct image_t *img)
   cr_max = cod_cr_max;
   draw = cod_draw;
   //return img;
-  
   
   // Define stuff
   uint32_t img_w = img->w;
@@ -151,41 +264,19 @@ static struct image_t *object_detector(struct image_t *img)
 
   // Filter and find centroid
   uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame_f);
-  // VERBOSE_PRINT("Color count %d: %u, threshold %u, x_c %d, y_c %d\n", camera, object_count, count_threshold, x_c, y_c);
-  // VERBOSE_PRINT("centroid %d: (%d, %d) r: %4.2f a: %4.2f\n", camera, x_c, y_c,
-  //       hypotf(x_c, y_c) / hypotf(img->w * 0.5, img->h * 0.5), RadOfDeg(atan2f(y_c, x_c)));
-  //VERBOSE_PRINT("check me bitch 2= %d\n", masked_frame_f[50000]);
-  //VERBOSE_PRINT("Test if mask frame works = %d", count );
-  // VERBOSE_PRINT("IM GOING INTO BLACKIE \n");
-  // for (int iii=0;iii<520;iii++){
-  //   for(int iv=0;iv<240;iv++){
-  //      VERBOSE_PRINT("%i ",masked_frame_f[iii*240 + iv]);
-  //    }
-  //    VERBOSE_PRINT("\n");
-  //  }
+
   getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
   
-  // for (int iii=0;iii<process_variables.nsectrow;iii++){
-  //   for(int iv=0;iv<process_variables.nsectcol;iv++){
-  //     VERBOSE_PRINT("%i ",black_array[iii*process_variables.nsectcol + iv]);
-  //   }
-  //   VERBOSE_PRINT("\n");
-  // }
   getObstacles(black_array, obstacle_array, &process_variables);
-  VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
+  //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   distAndHead(obstacle_array, output_array, &process_variables);
   VERBOSE_PRINT("OUTPUT IS %f, %f, %f \n", output_array[0][0], output_array[0][1], output_array[0][2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
 
+  // update the obstacle message 
+  global_obstacle_msg.distance = output_array[0][0];
+  global_obstacle_msg.left_heading = output_array[0][1];
+  global_obstacle_msg.right_heading = output_array[0][2];
 
-//   int32_t x_c, y_c;
-
-//   uint32_t lenn = img->w*img->h;
-//   uint32_t masked_frame3[lenn] ;
-//   memset( masked_frame3, 0, lenn*sizeof(uint32_t) );
-
-//   // Filter and find centroid
-//   uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame3);
-//   // VERBOSE_PRINT("Test if mask frame works = %d", count );
   pthread_mutex_lock(&mutex);
   global_filters[0].color_count =count;
   global_filters[0].x_c = 0 ;//x_c;
@@ -193,20 +284,12 @@ static struct image_t *object_detector(struct image_t *img)
   global_filters[0].updated = true;
   pthread_mutex_unlock(&mutex);
 
-
   return img;
 }
 
-// struct image_t *object_detector1(struct image_t *img);
-// struct image_t *object_detector1(struct image_t *img)
-// {
-//   return object_detector(img);
-// }
-
-//cancelled call for object dector 1 and 2 as we do not have a switch anymore
-
-
-
+/*
+ * Do the actual magic
+ */
 int getBlackArray(float threshold, int *maskie, int *blackie, struct process_variables_t *var){
     int nsectrow = var->nsectrow; 
     int nsectcol = var->nsectcol;
@@ -257,7 +340,9 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
     }   
 }
 
-
+/*
+ * Do the actual magic
+ */
 void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
 {
   int nsectrow = var->nsectcol; 
@@ -305,10 +390,10 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
 
   count1 = 0;
 
-  for(i=0;i<15;i++)
-    {   
-        printf("obstacle %d %d %d \n",obs_1[i][0],obs_1[i][1],obs_1[i][2]);
-    }  
+  // for(i=0;i<15;i++)
+  //   {   
+  //       printf("obstacle %d %d %d \n",obs_1[i][0],obs_1[i][1],obs_1[i][2]);
+  //   }  
   i=0;
 
 
@@ -393,13 +478,16 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
   }
   rewriter2 = 0;
 
-  for(i=0;i<15;i++)
-    {   
-        printf("obstacle %d %d %d \n",obs_2[i*3+0],obs_2[i*3+1],obs_2[i*3+2]);
-    }  
+  // for(i=0;i<15;i++)
+  //   {   
+  //       printf("obstacle %d %d %d \n",obs_2[i*3+0],obs_2[i*3+1],obs_2[i*3+2]);
+  //   }  
   i=0;
 }
 
+/*
+ * Do the actual magic
+ */
 int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var){  
     int nsectrow = var->nsectrow; 
     int nsectcol = var->nsectcol;
@@ -433,6 +521,9 @@ int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variable
     return 0; //QUESTION: why return 0??
 }
 
+/*
+ * Do the actual magic
+ */
 float distCalc(int nsectors, struct process_variables_t *var){
     int nsectrow = var->nsectrow; 
     int nsectcol = var->nsectcol;
@@ -458,6 +549,9 @@ float distCalc(int nsectors, struct process_variables_t *var){
     return dist; 
 }
 
+/*
+ * Do the actual magic
+ */
 int distAndHead(int *obstacle_array, float *input_array, struct process_variables_t *var){
     // {{0, 0, 0}, {43, 29, 31}, {47, 8, 11}, {0, 0, 0}}
     int nsectrow = var->nsectrow; 
@@ -495,112 +589,5 @@ int distAndHead(int *obstacle_array, float *input_array, struct process_variable
         // get heading
     }
 
-}
-
-void obstacle_detector_init(void)
-{
-  memset(global_filters, 0, 2*sizeof(struct color_object_t));
-  pthread_mutex_init(&mutex, NULL);
-  VERBOSE_PRINT("Obstacle detector initialized\n");
-
-  #ifdef OBSTACLE_DETECTOR_CAMERA
-    #ifdef OBSTACLE_DETECTOR_LUM_MIN
-      cod_lum_min = OBSTACLE_DETECTOR_LUM_MIN;
-      cod_lum_max = OBSTACLE_DETECTOR_LUM_MAX;
-      cod_cb_min = OBSTACLE_DETECTOR_CB_MIN;
-      cod_cb_max = OBSTACLE_DETECTOR_CB_MAX;
-      cod_cr_min = OBSTACLE_DETECTOR_CR_MIN;
-      cod_cr_max = OBSTACLE_DETECTOR_CR_MAX;
-    #endif
-    #ifdef OBSTACLE_DETECTOR_DRAW
-      cod_draw = OBSTACLE_DETECTOR_DRAW;
-    #endif
-    //cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, object_detector, OBSTACLE_DETECTOR_FPS);
-    cv_add_to_device(&OBSTACLE_DETECTOR_CAMERA, object_detector, OBSTACLE_DETECTOR_FPS);
-  #endif
-}
-
-void obstacle_detector_periodic(void)
-{
-  static struct color_object_t local_filters[2];
-  pthread_mutex_lock(&mutex);
-  memcpy(local_filters, global_filters, 2*sizeof(struct color_object_t));
-  pthread_mutex_unlock(&mutex);
-  //VERBOSE_PRINT("Sending obstacle detection\n");
-  AbiSendMsgVISUAL_DETECTION(OBSTACLE_DETECTION_ID, local_filters[0].x_c, local_filters[0].y_c, 0, 0, 4, 0);
-}
-
-uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
-                              uint8_t lum_min, uint8_t lum_max,
-                              uint8_t cb_min, uint8_t cb_max,
-                              uint8_t cr_min, uint8_t cr_max, uint32_t *masked_frame2)
-{
-  uint32_t cnt = 0;
-  uint32_t len = img->h*img->w;
-  //uint32_t masked_frame[len] ;
-  uint32_t tot_x = 0;
-  uint32_t tot_y = 0;
-  uint8_t *buffer = img->buf;
-  int mysize = img->buf_size;//sizeof(img->buf) / sizeof(uint8_t);
-  // VERBOSE_PRINT("size of buffer = %d\n",mysize);
-  // VERBOSE_PRINT("Image height = %d\n",img->h);
-  // VERBOSE_PRINT("Image width = %d\n",img->w);
-  // Go through all the pixels
-  for (uint16_t y = 0; y < img->h; y++) {
-    for (uint16_t x = 0; x < img->w; x++) {
-      // Check if the color is inside the specified values
-      uint8_t *yp, *up, *vp;
-      if (x % 2 == 0) {
-        // Even x
-        up = &buffer[y * 2 * img->w + 2 * x];      // U
-        yp = &buffer[y * 2 * img->w + 2 * x + 1];  // Y1
-        vp = &buffer[y * 2 * img->w + 2 * x + 2];  // V
-        //yp = &buffer[y * 2 * img->w + 2 * x + 3]; // Y2
-      } else {
-        // Uneven x
-        up = &buffer[y * 2 * img->w + 2 * x - 2];  // U
-        //yp = &buffer[y * 2 * img->w + 2 * x - 1]; // Y1
-        vp = &buffer[y * 2 * img->w + 2 * x];      // V
-        yp = &buffer[y * 2 * img->w + 2 * x + 1];  // Y2
-      }
-      if ( (*yp >= lum_min) && (*yp <= lum_max) &&
-           (*up >= cb_min ) && (*up <= cb_max ) &&
-           (*vp >= cr_min ) && (*vp <= cr_max )) {
-        cnt ++;
-        tot_x += x;
-        tot_y += y;
-        int idx = y * img->w +x;
-        //masked_frame[idx] = 1;
-        masked_frame2[idx] = 0;  // Changed to zero (white)
-        if (draw){
-          *yp = 255;  // make pixel brighter in image
-          *up = 128;
-          *vp = 128;
-        }
-              
-      } else {
-           int idx = y * img->w +x;
-           //masked_frame[idx] = 0;
-           masked_frame2[idx] = 1;  // Changed to one (black)
-          if (draw){
-            *yp = 0;
-            *up = 128;
-            *vp = 128;
-          }
-      }
-      //fprintf("%s", masked_frame[y * img->w +x]);
-    }
-  }
-
-  //VERBOSE_PRINT("cnt = %d\n",cnt);
-  uint32_t summy = 0;
-  for (int ica = len-1; ica >= 0; ica--) {
-    summy += masked_frame2[ica];
-  }
-  double percentage;
-  double percentage2;
-  percentage = 100.0*cnt/len;
-  percentage2 = 100.0*summy/len;
-  return cnt;
 }
 

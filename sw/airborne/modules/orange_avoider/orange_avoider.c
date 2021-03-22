@@ -54,6 +54,7 @@ uint8_t outer_index = 0;                       // index of the outer waypoint th
 uint8_t inner_index = 0;                       // index of the inner waypoint the drone is moving towards
 uint8_t subtraj_index = 0;                     // index of the subtrajectory the drone is using to fly
 bool trajectory_updated = false;               // check if it is safe to use the incoming trajectory
+uint8_t n_obstacles = OBSTACLES_IN_MAP;        // indicates the number of obstacles present in the map      
 
 // build variables for trajectories
 struct EnuCoor_i *outer_trajectory;
@@ -72,11 +73,15 @@ struct Obstacle *obstacle_map;
 #define ORANGE_AVOIDER_VISUAL_DETECTION_ID ABI_BROADCAST
 #endif
 static abi_event color_detection_ev;
-static void color_detection_cb(uint8_t __attribute__((unused)) sender_id,
-                               int16_t __attribute__((unused)) pixel_x, int16_t __attribute__((unused)) pixel_y,
-                               int16_t __attribute__((unused)) pixel_width, int16_t __attribute__((unused)) pixel_height,
-                               int32_t __attribute__((unused)) quality, int16_t __attribute__((unused)) extra)
+
+/* Update Obstacle Map based on Obstacle Detector Info */
+static void color_detection_cb(float distance, float left_heading, float right_heading)
 {
+  // if we are getting a zero value, we just ignore it
+  float origin_mse = sqrt(pow(distance,2)+pow(left_heading,2)+pow(right_heading,2));
+  if (origin_mse > 0.5) {
+    VERBOSE_PRINT("Received valid obstacle message %f, %f, %f\n", distance, left_heading, right_heading);
+  }
 }
 
 /*
@@ -106,10 +111,8 @@ void orange_avoider_init(void)
     buildInnerTrajectory(i);
   }
 
-  VERBOSE_PRINT("cazzini patatini\n");
-
   // bind our colorfilter callbacks to receive the color filter outputs
-  AbiBindMsgVISUAL_DETECTION(ORANGE_AVOIDER_VISUAL_DETECTION_ID, &color_detection_ev, color_detection_cb);
+  AbiBindMsgOBSTACLE_DETECTION(ORANGE_AVOIDER_VISUAL_DETECTION_ID, &color_detection_ev, color_detection_cb);
 }
 
 /*

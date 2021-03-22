@@ -98,8 +98,8 @@
 
     <message name="OBSTACLE_DETECTION" id="17">
       <field name="distance" type="float" unit="m"/>
-      <field name="elevation" type="float" unit="rad"/>
-      <field name="heading" type="float" unit="rad"/>
+      <field name="left_heading" type="float" unit="rad"/>
+      <field name="right_heading" type="float" unit="rad"/>
     </message>
 
     <message name="POSITION_ESTIMATE" id="18">
