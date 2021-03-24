@@ -33,9 +33,10 @@ struct Obstacle2 {
   double distance;
   double left_heading;
   double right_heading;
-}
+};
 
 struct ObstacleMsg {
+  uint8_t size;
   struct Obstacle2 *obstacles;
 };
 

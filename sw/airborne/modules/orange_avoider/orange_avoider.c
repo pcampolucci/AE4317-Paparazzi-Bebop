@@ -54,7 +54,7 @@ uint8_t outer_index = 0;                       // index of the outer waypoint th
 uint8_t inner_index = 0;                       // index of the inner waypoint the drone is moving towards
 uint8_t subtraj_index = 0;                     // index of the subtrajectory the drone is using to fly
 bool trajectory_updated = false;               // check if it is safe to use the incoming trajectory
-uint8_t n_obstacles = OBSTACLES_IN_MAP;        // indicates the number of obstacles present in the map      
+uint8_t n_obstacles = OBSTACLES_IN_MAP;        // indicates the number of msg present in the map      
 
 // build variables for trajectories
 struct EnuCoor_i *outer_trajectory;
@@ -75,17 +75,25 @@ struct Obstacle *obstacle_map;
 static abi_event color_detection_ev;
 
 /* Update Obstacle Map based on Obstacle Detector Info */
-static void color_detection_cb(uint8_t __attribute__((unused)) sender_id, float distance, float left_heading, float right_heading)
+static void color_detection_cb(uint8_t __attribute__((unused)) sender_id, struct ObstacleMsg *msg)
 {
-  // if we are getting a zero value, we just ignore it
-  float origin_mse = sqrt(pow(distance,2)+pow(left_heading,2)+pow(right_heading,2));
-  if (origin_mse >= 0.0) {
-    // VERBOSE_PRINT("Received valid obstacle message %f, %f, %f\n", distance, left_heading, right_heading);
-    struct EnuCoor_i absolute_position;
-    absolute_position.x = POS_BFP_OF_REAL(GetPosX() + sin(stateGetNedToBodyEulers_f()->psi) * distance);
-    absolute_position.y = POS_BFP_OF_REAL(GetPosY() + cos(stateGetNedToBodyEulers_f()->psi) * distance);
-    // VERBOSE_PRINT("drone state (psi, x, y): %f %f %f\n", stateGetNedToBodyEulers_f()->psi, GetPosX(), GetPosY());
-    // VERBOSE_PRINT("obstacle absolute : %f %f\n", POS_FLOAT_OF_BFP(absolute_position.x), POS_FLOAT_OF_BFP(absolute_position.y));
+  VERBOSE_PRINT("Received a message of size %d\n", msg->size);
+
+  for (int i=0; i < msg->size; i++){
+      // if we are getting a zero value, we just ignore it
+      if (msg->obstacles[i].distance == 0) {
+        msg->obstacles[i].distance = 1;
+      }
+    float origin_mse = sqrt(pow(msg->obstacles[i].distance,2)+pow(msg->obstacles[i].left_heading,2)+pow(msg->obstacles[i].right_heading,2));
+    if (origin_mse >= 0.0) {
+      VERBOSE_PRINT("Received valid obstacle message %f, %f, %f\n", msg->obstacles[i].distance, msg->obstacles[i].left_heading, msg->obstacles[i].right_heading);
+      struct EnuCoor_i absolute_position;
+      double heading = RadOfDeg((msg->obstacles[i].left_heading + msg->obstacles[i].right_heading)/2);
+      absolute_position.x = POS_BFP_OF_REAL(GetPosX() + sin(heading + stateGetNedToBodyEulers_f()->psi) * msg->obstacles[i].distance);
+      absolute_position.y = POS_BFP_OF_REAL(GetPosY() + cos(heading + stateGetNedToBodyEulers_f()->psi) * msg->obstacles[i].distance);
+      VERBOSE_PRINT("drone state (psi, x, y, z): %f %f %f %f\n", stateGetNedToBodyEulers_f()->psi, GetPosX(), GetPosY(), GetPosAlt());
+      VERBOSE_PRINT("obstacle absolute : %f %f\n", POS_FLOAT_OF_BFP(absolute_position.x), POS_FLOAT_OF_BFP(absolute_position.y));
+    }
   }
 }
 
@@ -125,7 +133,7 @@ void orange_avoider_init(void)
  */
 void orange_avoider_periodic(void)
 {
-  // Starting subtrajectory gets modified based on the presence of obstacles in the map
+  // Starting subtrajectory gets modified based on the presence of msg in the map
   clock_t t_periodic; 
   t_periodic = clock();
 

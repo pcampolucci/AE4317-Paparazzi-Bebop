@@ -27,6 +27,7 @@
 
 // Own header
 #include "modules/computer_vision/cv_detect_obstacles.h"
+#include "modules/orange_avoider/orange_avoider.h"
 #include "modules/computer_vision/cv.h"
 #include "firmwares/rotorcraft/navigation.h"
 #include "subsystems/abi.h"
@@ -94,13 +95,15 @@ struct process_variables_t {
 
 struct process_variables_t process_variables; 
 
-struct obstacle_message_t {
-  float distance;
-  float left_heading;
-  float right_heading;
-};
+// struct obstacle_message_t {
+//   float distance;
+//   float left_heading;
+//   float right_heading;
+// };
 
-struct obstacle_message_t global_obstacle_msg;
+// struct obstacle_message_t global_obstacle_msg;
+
+struct ObstacleMsg global_obstacle_msg;
 
 // Function declaration
 uint32_t mask_it(struct image_t *img, bool draw,
@@ -120,6 +123,9 @@ void obstacle_detector_init(void)
   memset(global_filters, 0, 2*sizeof(struct color_object_t));
   pthread_mutex_init(&mutex, NULL);
   VERBOSE_PRINT("Obstacle detector initialized\n");
+
+  // allocate memory for obstacle message (5 is the expected amount of obstacles to be sent in one go)
+  global_obstacle_msg.obstacles = malloc(sizeof(struct Obstacle2) * 5);
 
   #ifdef OBSTACLE_DETECTOR_CAMERA
     #ifdef OBSTACLE_DETECTOR_LUM_MIN
@@ -144,9 +150,7 @@ void obstacle_detector_periodic(void)
   pthread_mutex_lock(&mutex);
   memcpy(local_filters, global_filters, 2*sizeof(struct color_object_t));
   pthread_mutex_unlock(&mutex);
-  AbiSendMsgOBSTACLE_DETECTION(OBSTACLE_DETECTION_ID, global_obstacle_msg.distance,
-                                                      global_obstacle_msg.left_heading, 
-                                                      global_obstacle_msg.right_heading);
+  AbiSendMsgOBSTACLE_DETECTION(OBSTACLE_DETECTION_ID, &global_obstacle_msg);
 }
 
 /*
@@ -220,22 +224,32 @@ static struct image_t *object_detector(struct image_t *img)
   //   VERBOSE_PRINT("\n");
   // }
   getObstacles(black_array, obstacle_array, &process_variables);
-  for (int i=0 ; i<10; i++){
-    VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
+  // for (int i=0 ; i<10; i++){
+  //   VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
 
-  }
+  // }
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   n_obst = distAndHead(obstacle_array, output_array, &process_variables);
-  VERBOSE_PRINT("Number of obstacles is %i", n_obst);
-  VERBOSE_PRINT("OUTPUT 1 IS %f, %f, %f \n", output_array[0], output_array[1], output_array[2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
-  VERBOSE_PRINT("OUTPUT 2 IS %f, %f, %f \n", output_array[3], output_array[4], output_array[5]);
+  // VERBOSE_PRINT("Number of obstacles is %i", n_obst);
+  // VERBOSE_PRINT("OUTPUT 1 IS %f, %f, %f \n", output_array[0], output_array[1], output_array[2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
+  // VERBOSE_PRINT("OUTPUT 2 IS %f, %f, %f \n", output_array[3], output_array[4], output_array[5]);
   
   //{0, 20, 30, 2, 15, 20}
   
   // update the obstacle message 
-  global_obstacle_msg.distance = output_array[0];
-  global_obstacle_msg.left_heading = output_array[1];
-  global_obstacle_msg.right_heading = output_array[2];
+
+  // update message size
+  global_obstacle_msg.size = n_obst;
+
+  // start to override the previous message
+  for (int i=0; i < n_obst; i++) {
+    global_obstacle_msg.obstacles[i].distance = output_array[3*i];
+    global_obstacle_msg.obstacles[i].left_heading = output_array[3*i+1];
+    global_obstacle_msg.obstacles[i].right_heading = output_array[3*i+2];
+  }
+
+  // if we have more then expected, we can reallocate memory and expand the message
+  // TODO
 
   pthread_mutex_lock(&mutex);
   global_filters[0].color_count =count;
@@ -306,7 +320,7 @@ void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie, struct pr
  */
 void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variables_t *var)
 {
-  VERBOSE_PRINT("Going into getObstacles \n");
+  //VERBOSE_PRINT("Going into getObstacles \n");
   int nsectrow = var->nsectcol; 
   int nsectcol = var->nsectrow;
   // int npixh = var->npixh;
@@ -492,7 +506,7 @@ void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variabl
     float heading_r =0; 
 
     if (l_pixels < (width_pic/2)) {
-        heading_l = -factor * (l_pixels - (width_pic / 2));
+        heading_l = factor * (l_pixels - (width_pic / 2));
         head_array[0] = heading_l;
     }
     else if (l_pixels >= (width_pic/2)){
@@ -500,7 +514,7 @@ void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variabl
         head_array[0] = heading_l;
     }
     if (r_pixels < (width_pic/2)){
-        heading_r = -factor * (r_pixels - (width_pic / 2));
+        heading_r = factor * (r_pixels - (width_pic / 2));
         head_array[1] = heading_r;
     }
     else if (r_pixels >= (width_pic/2)){
@@ -558,7 +572,7 @@ uint8_t distAndHead(uint16_t *obstacle_array, float *input_array, struct process
         input_headl = obstacle_array[i+1];
         input_headr = obstacle_array[i+2]; 
         int sum = input_dist + input_headl + input_headr;
-        VERBOSE_PRINT("SUM IS EQUAL %i", sum);
+        // VERBOSE_PRINT("SUM IS EQUAL %i", sum);
         if (sum == 0){
             break; 
         }
