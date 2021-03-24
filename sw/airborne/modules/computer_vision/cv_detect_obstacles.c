@@ -28,6 +28,7 @@
 // Own header
 #include "modules/computer_vision/cv_detect_obstacles.h"
 #include "modules/computer_vision/cv.h"
+#include "firmwares/rotorcraft/navigation.h"
 #include "subsystems/abi.h"
 #include "std.h"
 
@@ -68,6 +69,8 @@ uint8_t cod_cr_max = 0;
 
 bool cod_draw = false;
 
+float e = 2.71828;  // Euler's number
+
 // define global variables
 struct color_object_t {
   int32_t x_c;
@@ -86,6 +89,7 @@ struct process_variables_t {
   int width_pic;
   int nsectcol;
   int nsectrow;
+  float altitude; 
 };
 
 struct process_variables_t process_variables; 
@@ -98,12 +102,6 @@ struct obstacle_message_t {
 
 struct obstacle_message_t global_obstacle_msg;
 
-
-int altitude = 1.09100; //meters
-float e = 2.71828;  // the constant
-
-
-
 // Function declaration
 uint32_t mask_it(struct image_t *img, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
@@ -114,7 +112,7 @@ void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie, struct pr
 void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variables_t *var);
 void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var);
 float distCalc(int nsectors, struct process_variables_t *var);
-void distAndHead(uint16_t *obstacle_array, float *input_array, struct process_variables_t *var);
+uint8_t distAndHead(uint16_t *obstacle_array, float *input_array, struct process_variables_t *var);
 static struct image_t *object_detector(struct image_t *img);
 
 void obstacle_detector_init(void)
@@ -168,11 +166,11 @@ static struct image_t *object_detector(struct image_t *img)
   cr_max = cod_cr_max;
   draw = cod_draw;
   //return img;
-  
-  
+
   // Define constants
   uint32_t img_w = img->w;
   uint32_t img_h = img->h; 
+  uint8_t n_obst = 0; // number of obstacles
 
   uint32_t len_pic = img_w*img_h;
   // int32_t x_c, y_c;
@@ -186,6 +184,7 @@ static struct image_t *object_detector(struct image_t *img)
   process_variables.nsectrow = img_w/(process_variables.npixh);
   process_variables.FOV_horizontal = 110;
   process_variables.FOV_vertical = 52.3024;
+  process_variables.altitude = GetPosAlt();
 
   // Define arrays needed for the processing
   uint8_t masked_frame_f[len_pic];
@@ -226,9 +225,13 @@ static struct image_t *object_detector(struct image_t *img)
 
   }
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
-  distAndHead(obstacle_array, output_array, &process_variables);
+  n_obst = distAndHead(obstacle_array, output_array, &process_variables);
+  VERBOSE_PRINT("Number of obstacles is %i", n_obst);
   VERBOSE_PRINT("OUTPUT 1 IS %f, %f, %f \n", output_array[0], output_array[1], output_array[2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
   VERBOSE_PRINT("OUTPUT 2 IS %f, %f, %f \n", output_array[3], output_array[4], output_array[5]);
+  
+  //{0, 20, 30, 2, 15, 20}
+  
   // update the obstacle message 
   global_obstacle_msg.distance = output_array[0];
   global_obstacle_msg.left_heading = output_array[1];
@@ -303,6 +306,7 @@ void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie, struct pr
  */
 void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variables_t *var)
 {
+  VERBOSE_PRINT("Going into getObstacles \n");
   int nsectrow = var->nsectcol; 
   int nsectcol = var->nsectrow;
   // int npixh = var->npixh;
@@ -375,7 +379,7 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
       if(obs_1[i][0]!=0)
       {   
           
-          for(int j=i+1;j<50;j++)
+          for(int j=i+1;j<49;j++)
           {
               if(obs_1[j][0]>obs_1[i][0])
               {
@@ -405,7 +409,7 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
               }    
           }
           // printf("O U T P U T i %i, cr %i, minl %i, maxr %i \n\n",i,cr,minl,maxr);
-          if(rewriter2==0){
+          if(rewriter2==0 && minl < maxr && cr!=0){
             obs_2[(rewriter2)*3+0]=cr;
             obs_2[(rewriter2)*3+1]=minl;
             obs_2[(rewriter2)*3+2]=maxr;
@@ -511,11 +515,8 @@ void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variabl
  */
 float distCalc(int nsectors, struct process_variables_t *var){
     int nsectrow = var->nsectrow; 
-    // int nsectcol = var->nsectcol;
-    // int npixh = var->npixh;
+    float altitude = var->altitude;
     int npixv = var->npixv; 
-    // int height_pic = var->height_pic;
-    // int width_pic = var->width_pic;
     float FOV_vertical = var->FOV_vertical; 
     int npixels = (nsectrow - 1 - nsectors)*npixv;
     float dist = 0; 
@@ -525,11 +526,12 @@ float distCalc(int nsectors, struct process_variables_t *var){
     else if (npixels < 10){
         dist = (1/(pow(0.45,(npixels/43))))-1 + altitude/tan((FOV_vertical/2)/57.2958);
     }
-    else if (npixels < 200){
+    else if (npixels < 100000){
         dist = 0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels))) + altitude/tan((FOV_vertical/2)/57.2958);
     }
-    else{
-        dist = 1000; 
+    if (dist > 10){
+        dist = 0; 
+        VERBOSE_PRINT("YOW WE ARE OUTSIDE THE CYBER ZOO \n");
     }
     return dist; 
 }
@@ -537,7 +539,7 @@ float distCalc(int nsectors, struct process_variables_t *var){
 /*
  * Function description
  */
-void distAndHead(uint16_t *obstacle_array, float *input_array, struct process_variables_t *var){
+uint8_t distAndHead(uint16_t *obstacle_array, float *input_array, struct process_variables_t *var){
     // {{0, 0, 0}, {43, 29, 31}, {47, 8, 11}, {0, 0, 0}}
     //int nsectrow = var->nsectrow; 
     //int nsectcol = var->nsectcol;
@@ -549,13 +551,14 @@ void distAndHead(uint16_t *obstacle_array, float *input_array, struct process_va
     int input_headl = 0; 
     int input_headr = 0; 
     float heading_array[2] = {};
-
+    uint8_t obst_counter = 0; 
     for(int i=0; i < COL_OBST*ROW_OBST; i=i+3){
         // check for zeros 
         input_dist = obstacle_array[i];
         input_headl = obstacle_array[i+1];
         input_headr = obstacle_array[i+2]; 
         int sum = input_dist + input_headl + input_headr;
+        VERBOSE_PRINT("SUM IS EQUAL %i", sum);
         if (sum == 0){
             break; 
         }
@@ -568,7 +571,9 @@ void distAndHead(uint16_t *obstacle_array, float *input_array, struct process_va
             // VERBOSE_PRINT("output 2: %f \n", input_array[i+1]);
             // VERBOSE_PRINT("output 3: %f \n", input_array[i+2]);
         }
+        obst_counter++; 
     }
+    return obst_counter; 
 }
 
 /*
