@@ -375,7 +375,7 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
       if(obs_1[i][0]!=0)
       {   
           
-          for(int j=i+1;j<50;j++)
+          for(int j=i+1;j<49;j++)
           {
               if(obs_1[j][0]>obs_1[i][0])
               {
