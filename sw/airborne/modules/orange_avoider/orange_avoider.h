@@ -29,6 +29,16 @@ struct Obstacle {
   double depth;
 };
 
+struct Obstacle2 {
+  double distance;
+  double left_heading;
+  double right_heading;
+}
+
+struct ObstacleMsg {
+  struct Obstacle2 *obstacles;
+};
+
 // motion increment point
 struct DPoint {
   int dx;

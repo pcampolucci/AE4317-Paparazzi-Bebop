@@ -80,12 +80,12 @@ static void color_detection_cb(uint8_t __attribute__((unused)) sender_id, float 
   // if we are getting a zero value, we just ignore it
   float origin_mse = sqrt(pow(distance,2)+pow(left_heading,2)+pow(right_heading,2));
   if (origin_mse >= 0.0) {
-    VERBOSE_PRINT("Received valid obstacle message %f, %f, %f\n", distance, left_heading, right_heading);
+    // VERBOSE_PRINT("Received valid obstacle message %f, %f, %f\n", distance, left_heading, right_heading);
     struct EnuCoor_i absolute_position;
     absolute_position.x = POS_BFP_OF_REAL(GetPosX() + sin(stateGetNedToBodyEulers_f()->psi) * distance);
     absolute_position.y = POS_BFP_OF_REAL(GetPosY() + cos(stateGetNedToBodyEulers_f()->psi) * distance);
-    VERBOSE_PRINT("drone state (psi, x, y): %f %f %f\n", stateGetNedToBodyEulers_f()->psi, GetPosX(), GetPosY());
-    VERBOSE_PRINT("obstacle absolute : %f %f\n", POS_FLOAT_OF_BFP(absolute_position.x), POS_FLOAT_OF_BFP(absolute_position.y));
+    // VERBOSE_PRINT("drone state (psi, x, y): %f %f %f\n", stateGetNedToBodyEulers_f()->psi, GetPosX(), GetPosY());
+    // VERBOSE_PRINT("obstacle absolute : %f %f\n", POS_FLOAT_OF_BFP(absolute_position.x), POS_FLOAT_OF_BFP(absolute_position.y));
   }
 }
 
