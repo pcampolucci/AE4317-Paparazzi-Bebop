@@ -39,7 +39,7 @@
 
 
 #define MASK_IT_VERBOSE TRUE
-#define ROW_OBST 50
+#define ROW_OBST 100
 #define COL_OBST 3
 #define ROW_OUT 20
 #define COL_OUT 3
@@ -105,16 +105,16 @@ float e = 2.71828;  // the constant
 
 
 // Function declaration
-uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
+uint32_t mask_it(struct image_t *img, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
                               uint8_t cb_min, uint8_t cb_max,
-                              uint8_t cr_min, uint8_t cr_max, uint32_t *masked_frame2);
+                              uint8_t cr_min, uint8_t cr_max, uint8_t *masked_frame2);
 
-int getBlackArray(float threshold, int *maskie, int *blackie, struct process_variables_t *var);
-void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var);
-int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var);
+void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie, struct process_variables_t *var);
+void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variables_t *var);
+void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var);
 float distCalc(int nsectors, struct process_variables_t *var);
-int distAndHead(int *obstacle_array, float *input_array, struct process_variables_t *var);
+void distAndHead(uint16_t *obstacle_array, float *input_array, struct process_variables_t *var);
 static struct image_t *object_detector(struct image_t *img);
 
 void obstacle_detector_init(void)
@@ -170,14 +170,12 @@ static struct image_t *object_detector(struct image_t *img)
   //return img;
   
   
-  // Define stuff
+  // Define constants
   uint32_t img_w = img->w;
   uint32_t img_h = img->h; 
 
   uint32_t len_pic = img_w*img_h;
-  uint32_t masked_frame_f[len_pic];
-  memset( masked_frame_f, 0, len_pic*sizeof(uint32_t));
-  int32_t x_c, y_c;
+  // int32_t x_c, y_c;
 
   // Populate struct
   process_variables.height_pic = img_w;
@@ -190,15 +188,18 @@ static struct image_t *object_detector(struct image_t *img)
   process_variables.FOV_vertical = 52.3024;
 
   // Define arrays needed for the processing
-  int black_array[len_pic];
-  int obstacle_array[ROW_OBST][COL_OBST]; 
-  memset(obstacle_array, 0, ROW_OBST*COL_OBST*sizeof(int));
-  float output_array[ROW_OUT][ROW_OUT];
+  uint8_t masked_frame_f[len_pic];
+  memset(masked_frame_f, 0, len_pic*sizeof(uint8_t));
+  uint8_t black_array[len_pic];
+  uint16_t obstacle_array[ROW_OBST*COL_OBST]; 
+  memset(obstacle_array, 0, ROW_OBST*COL_OBST*sizeof(uint16_t));
+  float output_array[ROW_OUT*ROW_OUT];
   memset(output_array, 0, ROW_OUT*COL_OUT*sizeof(float));
+
   //VERBOSE_PRINT("check me bitch 1= %d\n", masked_frame_f[50000]);
 
   // Filter and find centroid
-  uint32_t count = mask_it(img, &x_c, &y_c, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame_f);
+  uint32_t count = mask_it(img, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame_f);
   // VERBOSE_PRINT("Color count %d: %u, threshold %u, x_c %d, y_c %d\n", camera, object_count, count_threshold, x_c, y_c);
   // VERBOSE_PRINT("centroid %d: (%d, %d) r: %4.2f a: %4.2f\n", camera, x_c, y_c,
   //       hypotf(x_c, y_c) / hypotf(img->w * 0.5, img->h * 0.5), RadOfDeg(atan2f(y_c, x_c)));
@@ -220,14 +221,18 @@ static struct image_t *object_detector(struct image_t *img)
   //   VERBOSE_PRINT("\n");
   // }
   getObstacles(black_array, obstacle_array, &process_variables);
+  for (int i=0 ; i<10; i++){
+    VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
+
+  }
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   distAndHead(obstacle_array, output_array, &process_variables);
-  // VERBOSE_PRINT("OUTPUT IS %f, %f, %f \n", output_array[0][0], output_array[0][1], output_array[0][2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
-
+  VERBOSE_PRINT("OUTPUT 1 IS %f, %f, %f \n", output_array[0], output_array[1], output_array[2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
+  VERBOSE_PRINT("OUTPUT 2 IS %f, %f, %f \n", output_array[3], output_array[4], output_array[5]);
   // update the obstacle message 
-  global_obstacle_msg.distance = output_array[0][0];
-  global_obstacle_msg.left_heading = output_array[0][1];
-  global_obstacle_msg.right_heading = output_array[0][2];
+  global_obstacle_msg.distance = output_array[0];
+  global_obstacle_msg.left_heading = output_array[1];
+  global_obstacle_msg.right_heading = output_array[2];
 
   pthread_mutex_lock(&mutex);
   global_filters[0].color_count =count;
@@ -243,13 +248,13 @@ static struct image_t *object_detector(struct image_t *img)
 /*
  * Function description
  */
-int getBlackArray(float threshold, int *maskie, int *blackie, struct process_variables_t *var){
+void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie, struct process_variables_t *var){
     int nsectrow = var->nsectrow; 
     int nsectcol = var->nsectcol;
     int npixh = var->npixh;
     int npixv = var->npixv; 
     int height_pic = var->height_pic;
-    int width_pic = var->width_pic;
+    //int width_pic = var->width_pic;
     float sum_sec_line = 0; //changed from int
     float sum_sec_tot = 0; //changed from int
     float average = 0; 
@@ -296,18 +301,18 @@ int getBlackArray(float threshold, int *maskie, int *blackie, struct process_var
 /*
  * Function description
  */
-void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
+void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variables_t *var)
 {
   int nsectrow = var->nsectcol; 
   int nsectcol = var->nsectrow;
-  int npixh = var->npixh;
-  int npixv = var->npixv; 
-  int height_pic = var->height_pic;
-  int width_pic = var->width_pic;
-  int obs_counter         = 0;
+  // int npixh = var->npixh;
+  // int npixv = var->npixv; 
+  // int height_pic = var->height_pic;
+  // int width_pic = var->width_pic;
+  // int obs_counter         = 0;
   int obs_1[50][3]        ={0};
-  int rewriter,rewriter2  = 0;
-  int p,pnew,o,count1;
+  int rewriter = 0,rewriter2  = 1;
+  int p,pnew,count1       =0;
   int minl,maxr,cr        = 0;
 
   for(int i=0;i<50;i++)
@@ -316,10 +321,7 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
     obs_2[i*3+1]=0  ;
     obs_2[i*3+2]=0  ;
     }  
-    
-
-
-  
+ 
   for (int i=0; i<nsectcol;i++)
   { 
       for (int j=0; j<nsectrow;j++)
@@ -368,12 +370,12 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
   } 
 
   rewriter = 0;  
-  for(int i=0;i<50;i++)
+  for(int i=0;i<49;i++)
   {            
       if(obs_1[i][0]!=0)
       {   
           
-          for(int j=0+i;j<50;j++)
+          for(int j=i+1;j<50;j++)
           {
               if(obs_1[j][0]>obs_1[i][0])
               {
@@ -390,61 +392,92 @@ void getObstacles(int *black_array, int *obs_2, struct process_variables_t *var)
                   }
                   if (obs_1[j][2] >= obs_1[i][1]  && obs_1[j][2] <= obs_1[i][2]){
                       if(obs_1[j][1] < obs_1[i][1]){
-                        maxr = obs_1[i][2];
-                        minl = obs_1[j][1];
+                          maxr = obs_1[i][2];
+                          minl = obs_1[j][1];
                       }
                       else{
-                        maxr = obs_1[i][2];
-                        minl = obs_1[i][1];
+                          maxr = obs_1[i][2];
+                          minl = obs_1[i][1];
                       }   
                       cr = obs_1[j][0];   
-                  }            
+                  }
+                             
               }    
           }
-          if(cr==0){}
-          else{
-              if(obs_2[(rewriter2-1)*3+0]== cr){
-                  if(obs_2[(rewriter2-1)*3+1]==minl && obs_2[(rewriter2-1)*3+2]==maxr){
-                    cr=0;
-                    minl=0;
-                    maxr=0; 
-                  }
-                  if(obs_2[(rewriter2-1)*3+1]<minl || obs_2[(rewriter2-1)*3+2]>maxr){
-                    cr=0;
-                    minl=0;
-                    maxr=0; 
-                  }
-              }
-              else{
-                obs_2[rewriter2*3+0]=cr;
-                obs_2[rewriter2*3+1]=minl;
-                obs_2[rewriter2*3+2]=maxr;
-                rewriter2 +=1;
-                cr=0;
-                minl=0;
-                maxr=0; 
-              }                
+          // printf("O U T P U T i %i, cr %i, minl %i, maxr %i \n\n",i,cr,minl,maxr);
+          if(obs_2[(rewriter2-1)*3+0]==0){
+            obs_2[rewriter2*3+0]=cr;
+            obs_2[rewriter2*3+1]=minl;
+            obs_2[rewriter2*3+2]=maxr;
+            rewriter2 +=1;
+            cr=0;
+            minl=0;
+            maxr=0; 
           }
+          else{
+              if(obs_2[(rewriter2-1)*3+0]<= cr){
+                  if(obs_2[(rewriter2-1)*3+1]<=minl && obs_2[(rewriter2-1)*3+2]>=maxr){ //inside previous overlap
+                    // cr=0;
+                    // minl=0;
+                    // maxr=0;
+                    // rewriter2 += 1; 
+                    // VERBOSE_PRINT("I am likely fucking us here!!! %i \n", rewriter2);
+                  }
+                  else if(obs_2[(rewriter2-1)*3+1]>minl && obs_2[(rewriter2-1)*3+2]>=maxr &&obs_2[(rewriter2-1)*3+1]<=maxr){ //overlap left
+                    obs_2[(rewriter2-1)*3+0]=cr;
+                    obs_2[(rewriter2-1)*3+1]=minl;
+                    
+                    // VERBOSE_PRINT("increasing left boundary %i \n", rewriter2);
+                    rewriter2 +=1;
+                    cr=0;
+                    minl=0;
+                    maxr=0; 
+                  }
+                  else if (obs_2[(rewriter2-1)*3+1]<=minl && obs_2[(rewriter2-1)*3+2]<maxr && obs_2[(rewriter2-1)*3+2]>=minl) {  //overlapping right
+                    obs_2[(rewriter2-1)*3+0]=cr;
+                    
+                    obs_2[(rewriter2-1)*3+2]=maxr;
+                    // VERBOSE_PRINT("increasing right boundary %i \n", rewriter2);
+                    rewriter2 +=1;
+                    cr=0;
+                    minl=0;
+                    maxr=0; 
+                  } 
+                  else if (obs_2[(rewriter2-1)*3+2]<minl || obs_2[(rewriter2-1)*3+1]<maxr) {  //new or seperate detect ?
+                    obs_2[rewriter2*3+0]=cr;
+                    obs_2[rewriter2*3+1]=minl;
+                    obs_2[rewriter2*3+2]=maxr;
+                    // VERBOSE_PRINT("Adding a new Pole? %i \n", rewriter2);
+                    rewriter2 +=1;
+                    cr=0;
+                    minl=0;
+                    maxr=0; 
+                  }
+                }                 
+              
+                     
+              }
       }
+    //  rewriter2 = 1; 
   }
-  rewriter2 = 0;
+
 
   // this one is causing problems
-  for(int i=0;i<15;i++)
-    {   
-        printf("obstacle %d %d %d \n",obs_2[i*3+0],obs_2[i*3+1],obs_2[i*3+2]);
-    }  
+  // for(int i=0;i<15;i++)
+  //   {   
+  //       printf("obstacle %d %d %d \n",obs_2[i*3+0],obs_2[i*3+1],obs_2[i*3+2]);
+  //   }  
 }
 
 /*
  * Function description
  */
-int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var){  
-    int nsectrow = var->nsectrow; 
-    int nsectcol = var->nsectcol;
+void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var){  
+    // int nsectrow = var->nsectrow; 
+    // int nsectcol = var->nsectcol;
     int npixh = var->npixh;
-    int npixv = var->npixv; 
-    int height_pic = var->height_pic;
+    // int npixv = var->npixv; 
+    // int height_pic = var->height_pic;
     int width_pic = var->width_pic;
     //convert sectors into pixels
     int l_pixels = (l_sec+1)*npixh;
@@ -469,7 +502,7 @@ int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variable
         heading_r = factor * (r_pixels - (width_pic / 2));
         head_array[1] = heading_r;
     }
-    return 0; //QUESTION: why return 0??
+    //return 0; //QUESTION: why return 0??
 }
 
 /*
@@ -477,11 +510,11 @@ int headingCalc(int l_sec, int r_sec, float *head_array, struct process_variable
  */
 float distCalc(int nsectors, struct process_variables_t *var){
     int nsectrow = var->nsectrow; 
-    int nsectcol = var->nsectcol;
-    int npixh = var->npixh;
+    // int nsectcol = var->nsectcol;
+    // int npixh = var->npixh;
     int npixv = var->npixv; 
-    int height_pic = var->height_pic;
-    int width_pic = var->width_pic;
+    // int height_pic = var->height_pic;
+    // int width_pic = var->width_pic;
     float FOV_vertical = var->FOV_vertical; 
     int npixels = (nsectrow - 1 - nsectors)*npixv;
     float dist = 0; 
@@ -503,14 +536,14 @@ float distCalc(int nsectors, struct process_variables_t *var){
 /*
  * Function description
  */
-int distAndHead(int *obstacle_array, float *input_array, struct process_variables_t *var){
+void distAndHead(uint16_t *obstacle_array, float *input_array, struct process_variables_t *var){
     // {{0, 0, 0}, {43, 29, 31}, {47, 8, 11}, {0, 0, 0}}
-    int nsectrow = var->nsectrow; 
-    int nsectcol = var->nsectcol;
-    int npixh = var->npixh;
-    int npixv = var->npixv; 
-    int height_pic = var->height_pic;
-    int width_pic = var->width_pic;
+    //int nsectrow = var->nsectrow; 
+    //int nsectcol = var->nsectcol;
+    //int npixh = var->npixh;
+    //int npixv = var->npixv; 
+    //int height_pic = var->height_pic;
+    //int width_pic = var->width_pic;
     int input_dist = 0;
     int input_headl = 0; 
     int input_headr = 0; 
@@ -540,10 +573,10 @@ int distAndHead(int *obstacle_array, float *input_array, struct process_variable
 /*
  * Function description
  */
-uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
+uint32_t mask_it(struct image_t *img, bool draw,
                               uint8_t lum_min, uint8_t lum_max,
                               uint8_t cb_min, uint8_t cb_max,
-                              uint8_t cr_min, uint8_t cr_max, uint32_t *masked_frame2)
+                              uint8_t cr_min, uint8_t cr_max, uint8_t *masked_frame2)
 {
   uint32_t cnt = 0;
   uint32_t len = img->h*img->w;
@@ -551,7 +584,7 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
   uint32_t tot_x = 0;
   uint32_t tot_y = 0;
   uint8_t *buffer = img->buf;
-  int mysize = img->buf_size;//sizeof(img->buf) / sizeof(uint8_t);
+  //int mysize = img->buf_size;//sizeof(img->buf) / sizeof(uint8_t);
   // VERBOSE_PRINT("size of buffer = %d\n",mysize);
   // VERBOSE_PRINT("Image height = %d\n",img->h);
   // VERBOSE_PRINT("Image width = %d\n",img->w);
@@ -608,11 +641,11 @@ uint32_t mask_it(struct image_t *img, int32_t* p_xc, int32_t* p_yc, bool draw,
     summy += masked_frame2[ica];
   }
   //VERBOSE_PRINT("%d/%d/%d\n", masked_frame[50000], masked_frame[100000], masked_frame[len]);
-  double percentage;
-  double percentage2;
+  //double percentage;
+  //double percentage2;
   //percentage = 100.0*summy/len;
-  percentage = 100.0*cnt/len;
-  percentage2 = 100.0*summy/len;
+  //percentage = 100.0*cnt/len;
+  //percentage2 = 100.0*summy/len;
   // VERBOSE_PRINT("summy = %d\n",summy);
   // VERBOSE_PRINT("len = %d\n",len);
   // VERBOSE_PRINT("Positive mask = %f \n", percentage);
