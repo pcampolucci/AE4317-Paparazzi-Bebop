@@ -216,7 +216,8 @@ static struct image_t *object_detector(struct image_t *img)
   //    VERBOSE_PRINT("\n");
   //  }
   getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
-  
+
+  getRealValues(output_array_real,&process_variables);
   // for (int iii=0;iii<process_variables.nsectrow;iii++){
   //   for(int iv=0;iv<process_variables.nsectcol;iv++){
   //     VERBOSE_PRINT("%i ",black_array[iii*process_variables.nsectcol + iv]);
@@ -224,14 +225,22 @@ static struct image_t *object_detector(struct image_t *img)
   //   VERBOSE_PRINT("\n");
   // }
   getObstacles(black_array, obstacle_array, &process_variables);
-  for (int i=0 ; i<10; i++){
-    VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
-  }
+  
+  //NEXT 3 LINES COMENTED OUT BY ALE
+  //for (int i=0 ; i<10; i++){
+  //  VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
+  //}
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   n_obst = distAndHead(obstacle_array, output_array, &process_variables);
-  VERBOSE_PRINT("Number of obstacles is %i", n_obst);
+  VERBOSE_PRINT("Number of obstacles is %i \n", n_obst);
   VERBOSE_PRINT("OUTPUT 1 IS %f, %f, %f \n", output_array[0], output_array[1], output_array[2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
+  VERBOSE_PRINT("REAL 1 IS %f, %f, %f \n", output_array_real[0], output_array_real[1], output_array_real[2]);
   VERBOSE_PRINT("OUTPUT 2 IS %f, %f, %f \n", output_array[3], output_array[4], output_array[5]);
+  VERBOSE_PRINT("REAL 1 IS %f, %f, %f \n", output_array_real[3], output_array_real[4], output_array_real[5]);
+  
+  VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! YAWWWWWWWWWWWWW %f \n", stateGetNedToBodyEulers_f()->psi);
+  VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! YYYYYYYYYYYYYYY %f \n", GetPosY());
+  VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! XXXXXXXXXXXXXXX %f \n", GetPosX());
   
   //{0, 20, 30, 2, 15, 20}
   
@@ -582,28 +591,30 @@ uint8_t distAndHead(uint16_t *obstacle_array, float *input_array, struct process
 
 getRealValues(float *array, struct process_variables_t *var){
   // Get the coordinates
-  float pole_array_tot[N_OBST*2] = {-0.05, -1.9, 3.6, -0.15, 0.4, 0.3, -3.3, 0.2};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
+  //float pole_array_tot[N_OBST*2] = {-0.05, -1.9, 3.6, -0.15, 0.4, 0.3, -3.3, 0.2};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
+  float pole_array_tot[N_OBST*2] = {-1.8, -3.4, -1.8, 0.5, 0.6, 0.7, 1.5, -2.5, 2.8, 2.5};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
   float poles_in_view[N_OBST*2]; 
-  float drone_posx = GetPosY();  // Flipped because of logger
-  float drone_posy = GetPosX();  // Flipped because of logger
-  float drone_posz = GetAltitude(); 
-  float drone_yaw = 20; 
+  float drone_posx = GetPosX();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->y
+  float drone_posy = GetPosY();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->x
+  float drone_posz = GetPosAlt(); 
+  float drone_yaw = stateGetNedToBodyEulers_f()->psi; 
   float heading = 0; 
   float FOV_hor = var->FOV_horizontal; 
   int count = 0; 
   float width_pole = 0.2; 
   float distance = 0; 
+  
   // Get the poles in view
   for (int i=0; i<N_OBST*2; i=i+2){
-    heading = atan((pole_array_tot[i]-drone_posx)/(pole_array_tot[i+1]-drone_posy)) + (drone_yaw-pi/2);
+    heading = atan((pole_array_tot[i]-drone_posx)/(pole_array_tot[i+1]-drone_posy)) + (drone_yaw-pi/2); 
     distance = sqrt(pow((drone_posx-pole_array_tot[i]),2) + pow((drone_posy-pole_array_tot[i+1]),2));  // Real Distance
 
     if (fabs(heading)+atan((width_pole/2)/distance) < FOV_hor/2){
       poles_in_view[count] = pole_array_tot[i];
       poles_in_view[count] = pole_array_tot[i+1];
-      array[count] = distance;  
+      array[count] = distance;                                   // Real Distance
       array[count+1] = heading - atan((width_pole/2)/distance);  // Real Heading left
-      array[count+2] = heading - atan((width_pole/2)/distance);  // Real Heading right
+      array[count+2] = heading + atan((width_pole/2)/distance);  // Real Heading right
       count++; 
     }
   }
