@@ -311,7 +311,7 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
   // int width_pic = var->width_pic;
   // int obs_counter         = 0;
   int obs_1[50][3]        ={0};
-  int rewriter = 0,rewriter2  = 1;
+  int rewriter = 0,rewriter2  = 0;
   int p,pnew,count1       =0;
   int minl,maxr,cr        = 0;
 
@@ -405,10 +405,10 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
               }    
           }
           // printf("O U T P U T i %i, cr %i, minl %i, maxr %i \n\n",i,cr,minl,maxr);
-          if(obs_2[(rewriter2-1)*3+0]==0){
-            obs_2[rewriter2*3+0]=cr;
-            obs_2[rewriter2*3+1]=minl;
-            obs_2[rewriter2*3+2]=maxr;
+          if(rewriter2==0){
+            obs_2[(rewriter2)*3+0]=cr;
+            obs_2[(rewriter2)*3+1]=minl;
+            obs_2[(rewriter2)*3+2]=maxr;
             rewriter2 +=1;
             cr=0;
             minl=0;
@@ -417,11 +417,12 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
           else{
               if(obs_2[(rewriter2-1)*3+0]<= cr){
                   if(obs_2[(rewriter2-1)*3+1]<=minl && obs_2[(rewriter2-1)*3+2]>=maxr){ //inside previous overlap
-                    // cr=0;
-                    // minl=0;
-                    // maxr=0;
+                    obs_2[(rewriter2-1)*3+0]=cr;
+                    cr=0;
+                    minl=0;
+                    maxr=0;
                     // rewriter2 += 1; 
-                    // VERBOSE_PRINT("I am likely fucking us here!!! %i \n", rewriter2);
+                    // VERBOSE_PRINT("I am likely messing us here!!! %i \n", rewriter2);
                   }
                   else if(obs_2[(rewriter2-1)*3+1]>minl && obs_2[(rewriter2-1)*3+2]>=maxr &&obs_2[(rewriter2-1)*3+1]<=maxr){ //overlap left
                     obs_2[(rewriter2-1)*3+0]=cr;
@@ -444,9 +445,9 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
                     maxr=0; 
                   } 
                   else if (obs_2[(rewriter2-1)*3+2]<minl || obs_2[(rewriter2-1)*3+1]<maxr) {  //new or seperate detect ?
-                    obs_2[rewriter2*3+0]=cr;
-                    obs_2[rewriter2*3+1]=minl;
-                    obs_2[rewriter2*3+2]=maxr;
+                    obs_2[(rewriter2)*3+0]=cr;
+                    obs_2[(rewriter2)*3+1]=minl;
+                    obs_2[(rewriter2)*3+2]=maxr;
                     // VERBOSE_PRINT("Adding a new Pole? %i \n", rewriter2);
                     rewriter2 +=1;
                     cr=0;
