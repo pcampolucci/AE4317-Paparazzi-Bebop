@@ -484,9 +484,9 @@ void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variabl
     // int npixv = var->npixv; 
     // int height_pic = var->height_pic;
     int width_pic = var->width_pic;
-    //convert sectors into pixels
     int l_pixels = (l_sec+1)*npixh;
     int r_pixels = r_sec * npixh;
+    float FOV_H = var->FOV_horizontal;
     float factor = 0.2023;
     float heading_l =0; 
     float heading_r =0; 
