@@ -275,7 +275,7 @@ static struct image_t *object_detector(struct image_t *img)
   if (n_obstReal == 1)
   {
     VERBOSE_PRINT("OBSTACLE DETECTOR OUTPUT %i, %i, %i, %i, %i, %i \n", obstacle_array[0], obstacle_array[1], obstacle_array[2], obstacle_array[3], obstacle_array[4], obstacle_array[5]);
-    VERBOSE_PRINT("COMPARISON %f, %f, %i, %i, %i, %f, %f, %f \n", process_variables.altitude, process_variables.pitch, npix_dist_global, npix_headl_global, npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2]);
+    VERBOSE_PRINT("COMPARISON %f, %f, %i, %i, %i, %f, %f, %f, %f \n", process_variables.altitude, process_variables.pitch, npix_dist_global, npix_headl_global, npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2], output_array[0]);
   }
   //{0, 20, 30, 2, 15, 20}
   
@@ -571,7 +571,19 @@ float distCalc(int nsectors, struct process_variables_t *var){
     float dist = 0; 
     float pitch = var->pitch;
     float pitch_pix = (pitch/((FOV_vertical)/57.2958))*npixv*nsectrow;
-
+    double p00 =  -4.045e+05;
+    double p10 = 156.6;
+    double p01 = 2.232e+06;
+    double p20 = -0.03603;
+    double p11 = -574.2;
+    double p02 = -4.105e+06;
+    double p21 = 0.06744;
+    double p12 = 526.3 ;
+    double p03 = 2.517e+06;
+    float x = 0;
+    float y = 0;
+    x = npixels;
+    y = altitude;
     npixels = npixels + round(pitch_pix);
     
     npix_dist_global = npixels; 
@@ -581,8 +593,9 @@ float distCalc(int nsectors, struct process_variables_t *var){
     // else if (npixels < 10000){
     //     dist = (1/(pow(0.45,(npixels/60))))-1 + altitude/tan((FOV_vertical/2)/57.2958);
     // }
-    else if (npixels < 80){
-        dist = 0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels))) + altitude/tan((FOV_vertical/2)/57.2958);
+    else if (npixels < 300){
+        //dist = 0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels))) + altitude/tan((FOV_vertical/2)/57.2958);
+        dist = p00 + p10*x + p01*y + p20*pow(x,2) + p11*x*y + p02*pow(y,2) + p21*pow(x,2)*y + p12*x*pow(y,2) + p03*pow(y,3);
     }
     if (dist > 10){
         dist = 0; 
