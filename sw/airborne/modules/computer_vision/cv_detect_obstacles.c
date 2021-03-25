@@ -36,7 +36,7 @@
 #include <stdbool.h>
 #include <math.h>
 #include "pthread.h"
-
+#include <time.h>
 
 
 #define MASK_IT_VERBOSE TRUE
@@ -203,7 +203,10 @@ static struct image_t *object_detector(struct image_t *img)
   //VERBOSE_PRINT("check me bitch 1= %d\n", masked_frame_f[50000]);
 
   // Filter and find centroid
+  //clock_t maskit_1 = clock();
   uint32_t count = mask_it(img, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame_f);
+  //clock_t maskit_2 = clock();
+  //VERBOSE_PRINT("!!!!!!!!!!!!!!!!!!!!!!MASK IT TIME (MILISECONDS) %f \n",(double)(maskit_2 - maskit_1)*1000 / CLOCKS_PER_SEC);
   // VERBOSE_PRINT("Color count %d: %u, threshold %u, x_c %d, y_c %d\n", camera, object_count, count_threshold, x_c, y_c);
   // VERBOSE_PRINT("centroid %d: (%d, %d) r: %4.2f a: %4.2f\n", camera, x_c, y_c,
   //       hypotf(x_c, y_c) / hypotf(img->w * 0.5, img->h * 0.5), RadOfDeg(atan2f(y_c, x_c)));
@@ -216,8 +219,10 @@ static struct image_t *object_detector(struct image_t *img)
   //    }
   //    VERBOSE_PRINT("\n");
   //  }
+  //clock_t blackArray_1 = clock();
   getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
-
+  //clock_t blackArray_2 = clock();
+  //VERBOSE_PRINT("!!!!!!!!!!!!!!!!!!!!!!BlackArray TIME (MILISECONDS) %f \n",(double)(blackArray_2 - blackArray_1)*1000 / CLOCKS_PER_SEC);
   //getRealValues(output_array_real,&process_variables);
   // for (int iii=0;iii<process_variables.nsectrow;iii++){
   //   for(int iv=0;iv<process_variables.nsectcol;iv++){
@@ -225,14 +230,21 @@ static struct image_t *object_detector(struct image_t *img)
   //   }
   //   VERBOSE_PRINT("\n");
   // }
+  //clock_t getObstacles_1 = clock();
   getObstacles(black_array, obstacle_array, &process_variables);
-  
+  //clock_t getObstacles_2 = clock();
+  //VERBOSE_PRINT("!!!!!!!!!!!!!!!!!!!!!!GetObstacles TIME (MILISECONDS) %f \n",(double)(getObstacles_2 - getObstacles_1)*1000 / CLOCKS_PER_SEC);
+
   //NEXT 3 LINES COMENTED OUT BY ALE
   //for (int i=0 ; i<10; i++){
   //  VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
   //}
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
+  //clock_t distAndHead_1 = clock();
   n_obst = distAndHead(obstacle_array, output_array, &process_variables);
+  //clock_t distAndHead_2 = clock();
+  //VERBOSE_PRINT("!!!!!!!!!!!!!!!!!!!!!!DistAndHead TIME (MILISECONDS) %f \n",(double)(distAndHead_2 - distAndHead_1)*1000 / CLOCKS_PER_SEC);
+
   VERBOSE_PRINT("Number of obstacles is %i \n", n_obst);
   VERBOSE_PRINT("ESTIMATED 1 IS %f, %f, %f \n", output_array[0], output_array[1], output_array[2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
   VERBOSE_PRINT("ESTIMATED 2 IS %f, %f, %f \n", output_array[3], output_array[4], output_array[5]);
