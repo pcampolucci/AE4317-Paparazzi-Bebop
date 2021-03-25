@@ -657,7 +657,7 @@ int getRealValues(float *array, struct process_variables_t *var){ //Ale Changed
     //                pole_x             drone_x      pole_y              drone_y           yaw
     heading_sign  = atan((pole_array_tot[i]-drone_posx)/(pole_array_tot[i+1]-drone_posy)) + (- drone_yaw); //this is used to calcuated sign of the angle (heading2/fabs(heading2)) gives 1 or -1
     distance = sqrt(pow((drone_posx-pole_array_tot[i]),2) + pow((drone_posy-pole_array_tot[i+1]),2));  // Real Distance
-    VERBOSE_PRINT("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII is equal TOOOOOOOO %i", i);
+    //VERBOSE_PRINT("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII is equal TOOOOOOOO %i", i);
     //Formula for angle between two vectors
     //nominator = (distance*sin(drone_yaw)-drone_posx)*(pole_array_tot[i]-drone_posx)+(distance*cos(drone_yaw)-drone_posy)*(pole_array_tot[i+1]-drone_posy)
     //denominator = sqrt(pow((distance*sin(drone_yaw)-drone_posx),2)+pow((distance*cos(drone_yaw)-drone_posy),2))*sqrt(pow((pole_array_tot[i]-drone_posx),2)+pow((pole_array_tot[i+1]-drone_posy),2))
@@ -686,7 +686,7 @@ int getRealValues(float *array, struct process_variables_t *var){ //Ale Changed
       array[count+1] = angle - atan((width_pole/2)/distance);  // Real Heading left
       array[count+2] = angle + atan((width_pole/2)/distance);  // Real Heading right
       count = count + 3; 
-      VERBOSE_PRINT("WE ARE INNNNNNNNNNNNNNNNNNNN \n");
+      //VERBOSE_PRINT("WE ARE INNNNNNNNNNNNNNNNNNNN \n");
     }
   }
   return (count/3); //removed /3
