@@ -238,9 +238,9 @@ static struct image_t *object_detector(struct image_t *img)
   //VERBOSE_PRINT("!!!!!!!!!!!!!!!!!!!!!!GetObstacles TIME (MILISECONDS) %f \n",(double)(getObstacles_2 - getObstacles_1)*1000 / CLOCKS_PER_SEC);
 
   //NEXT 3 LINES COMENTED OUT BY ALE
-  for (int i=0 ; i<10; i++){
-    VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
-  }
+  //for (int i=0 ; i<10; i++){
+  //  VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
+  //}
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   //clock_t distAndHead_1 = clock();
   n_obst = distAndHead(obstacle_array, output_array, &process_variables);
@@ -657,7 +657,7 @@ int getRealValues(float *array, struct process_variables_t *var){ //Ale Changed
     //                pole_x             drone_x      pole_y              drone_y           yaw
     heading_sign  = atan((pole_array_tot[i]-drone_posx)/(pole_array_tot[i+1]-drone_posy)) + (- drone_yaw); //this is used to calcuated sign of the angle (heading2/fabs(heading2)) gives 1 or -1
     distance = sqrt(pow((drone_posx-pole_array_tot[i]),2) + pow((drone_posy-pole_array_tot[i+1]),2));  // Real Distance
-    
+    VERBOSE_PRINT("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII is equal TOOOOOOOO %i", i);
     //Formula for angle between two vectors
     //nominator = (distance*sin(drone_yaw)-drone_posx)*(pole_array_tot[i]-drone_posx)+(distance*cos(drone_yaw)-drone_posy)*(pole_array_tot[i+1]-drone_posy)
     //denominator = sqrt(pow((distance*sin(drone_yaw)-drone_posx),2)+pow((distance*cos(drone_yaw)-drone_posy),2))*sqrt(pow((pole_array_tot[i]-drone_posx),2)+pow((pole_array_tot[i+1]-drone_posy),2))
@@ -676,8 +676,8 @@ int getRealValues(float *array, struct process_variables_t *var){ //Ale Changed
       heading = -heading_old*(heading_sign/fabs(heading_sign));
     }
 
-    VERBOSE_PRINT("HEADING NEW %i, %f \n", i, (angle*180/pi));
-    VERBOSE_PRINT("HEADING %i, %f \n",i, (heading*180/pi));
+    //VERBOSE_PRINT("HEADING NEW %i, %f \n", i, (angle*180/pi));
+    //VERBOSE_PRINT("HEADING %i, %f \n",i, (heading*180/pi));
     //VERBOSE_PRINT("IF STATEMENT %i, %f \n", (i+1), (fabs(heading)+atan((width_pole/2)/distance)));
     if (fabs(angle)+atan((width_pole/2)/distance) < FOV_hor/2){
       poles_in_view[count] = pole_array_tot[i];
@@ -689,7 +689,7 @@ int getRealValues(float *array, struct process_variables_t *var){ //Ale Changed
       VERBOSE_PRINT("WE ARE INNNNNNNNNNNNNNNNNNNN \n");
     }
   }
-  return (count); //removed /3
+  return (count/3); //removed /3
 }
 
 
