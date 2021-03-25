@@ -103,6 +103,10 @@ struct obstacle_message_t {
   float right_heading;
 };
 
+int npix_dist_global = 0;  // Used to log the data 
+int npix_headl_global = 0;  // Used to log the data 
+int npix_headr_global = 0;  // Used to log the data 
+
 struct obstacle_message_t global_obstacle_msg;
 
 // Function declaration
@@ -254,7 +258,7 @@ static struct image_t *object_detector(struct image_t *img)
   //VERBOSE_PRINT("ESTIMATED 2 IS %f, %f, %f \n", output_array[9], output_array[10], output_array[11]);
 
   n_obstReal = getRealValues(output_array_real,&process_variables);
-  VERBOSE_PRINT("REAL OBSTACLE NUMBER IS %i \n", n_obstReal);
+  //VERBOSE_PRINT("REAL OBSTACLE NUMBER IS %i \n", n_obstReal);
   //VERBOSE_PRINT("REAL 1 IS %f, %f, %f \n", output_array_real[0], output_array_real[1], output_array_real[2]);
   //VERBOSE_PRINT("REAL 2 IS %f, %f, %f \n", output_array_real[3], output_array_real[4], output_array_real[5]);
   //VERBOSE_PRINT("REAL 3 IS %f, %f, %f \n", output_array_real[6], output_array_real[7], output_array_real[8]);
@@ -268,7 +272,11 @@ static struct image_t *object_detector(struct image_t *img)
   
 
   //ALE DATA ANALYSIS
-  //VERBOSE_PRINT("COMPARISON %i, %f, %f, %f, %f, %f, %f \n", n_obstReal, output_array[0], output_array[1], output_array[2], output_array_real[0], output_array_real[1], output_array_real[2]);
+  if (n_obstReal == 1)
+  {
+    VERBOSE_PRINT("OBSTACLE DETECTOR OUTPUT %i, %i, %i, %i, %i, %i \n", obstacle_array[0], obstacle_array[1], obstacle_array[2], obstacle_array[3], obstacle_array[4], obstacle_array[5]);
+    VERBOSE_PRINT("COMPARISON %f, %f, %i, %i, %i, %f, %f, %f \n", process_variables.altitude, process_variables.pitch, npix_dist_global, npix_headl_global, npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2]);
+  }
   //{0, 20, 30, 2, 15, 20}
   
   // update the obstacle message 
@@ -546,6 +554,8 @@ void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variabl
         heading_r = factor * (r_pixels - (width_pic / 2));
         head_array[1] = heading_r;
     }
+    npix_headl_global = l_pixels;
+    npix_headr_global = r_pixels;
     //return 0; //QUESTION: why return 0??
 }
 
@@ -555,21 +565,16 @@ void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variabl
 float distCalc(int nsectors, struct process_variables_t *var){
     int nsectrow = var->nsectrow; 
     float altitude = var->altitude;
-    VERBOSE_PRINT("ALTITUDE: %f", altitude);
     int npixv = var->npixv; 
     float FOV_vertical = var->FOV_vertical; 
     int npixels = (nsectrow - 1 - nsectors)*npixv;
     float dist = 0; 
     float pitch = var->pitch;
-    float offset_due_to_pitch = altitude/tan((FOV_vertical/2)/57.2958)-altitude/tan(((FOV_vertical/2)/57.2958)-pitch);
     float pitch_pix = (pitch/((FOV_vertical)/57.2958))*npixv*nsectrow;
-    //VERBOSE_PRINT("AMOUNT OF PIXELS %i \n", npixels);
-    //VERBOSE_PRINT("PERCENTAGE INCREASE %f \n", (pitch/(FOV_vertical/57.2958)));
-    //VERBOSE_PRINT("PITCH PIX %f", pitch_pix);
-    //VERBOSE_PRINT("width pixels %i \n", npixv*nsectrow);
-    npixels = npixels + round(pitch_pix);
-    //VERBOSE_PRINT("AMOUNT OF PIXELS %i \n", npixels);
 
+    npixels = npixels + round(pitch_pix);
+    
+    npix_dist_global = npixels; 
     if (npixels <= 1){
         dist = 0;
     }
