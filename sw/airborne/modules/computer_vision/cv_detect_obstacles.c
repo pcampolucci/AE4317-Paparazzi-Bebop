@@ -92,6 +92,7 @@ struct process_variables_t {
   int nsectcol;
   int nsectrow;
   float altitude; 
+  float pitch; 
 };
 
 struct process_variables_t process_variables; 
@@ -189,6 +190,7 @@ static struct image_t *object_detector(struct image_t *img)
   process_variables.FOV_horizontal = 1.850049; //[rad], equivalent to 106 degrees
   process_variables.FOV_vertical = 52.3024;
   process_variables.altitude = GetPosAlt();
+  process_variables.pitch = stateGetNedToBodyEulers_f()->theta; 
 
   // Define arrays needed for the processing
   uint8_t masked_frame_f[len_pic];
@@ -216,8 +218,10 @@ static struct image_t *object_detector(struct image_t *img)
   //    }
   //    VERBOSE_PRINT("\n");
   //  }
+
   getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
 
+  
   //getRealValues(output_array_real,&process_variables);
   // for (int iii=0;iii<process_variables.nsectrow;iii++){
   //   for(int iv=0;iv<process_variables.nsectcol;iv++){
@@ -228,9 +232,9 @@ static struct image_t *object_detector(struct image_t *img)
   getObstacles(black_array, obstacle_array, &process_variables);
   
   //NEXT 3 LINES COMENTED OUT BY ALE
-  //for (int i=0 ; i<10; i++){
-  //  VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
-  //}
+  for (int i=0 ; i<10; i++){
+    VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
+  }
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   n_obst = distAndHead(obstacle_array, output_array, &process_variables);
   VERBOSE_PRINT("Number of obstacles is %i \n", n_obst);
@@ -245,12 +249,12 @@ static struct image_t *object_detector(struct image_t *img)
   VERBOSE_PRINT("REAL 2 IS %f, %f, %f \n", output_array_real[3], output_array_real[4], output_array_real[5]);
   VERBOSE_PRINT("REAL 3 IS %f, %f, %f \n", output_array_real[6], output_array_real[7], output_array_real[8]);
   VERBOSE_PRINT("REAL 4 IS %f, %f, %f \n", output_array_real[9], output_array_real[10], output_array_real[11]);
-  //VERBOSE_PRINT("REAL 5 IS %f, %f, %f \n", output_array_real[12], output_array_real[13], output_array_real[14]);
+  VERBOSE_PRINT("REAL 5 IS %f, %f, %f \n", output_array_real[12], output_array_real[13], output_array_real[14]);
   
-  VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! YAWWWWWWWWWWWWW %f \n", stateGetNedToBodyEulers_f()->psi);
-  VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! XXXXXXXXXXXXXXX %f \n", GetPosX());
-  VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! YYYYYYYYYYYYYYY %f \n", GetPosY());
-  VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! XXXXXXXXXXXXXXX %f \n", GetPosX());
+  VERBOSE_PRINT("THE PITCH ISSSS %f \n", stateGetNedToBodyEulers_f()->theta);
+  // VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! XXXXXXXXXXXXXXX %f \n", GetPosX());
+  // VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! YYYYYYYYYYYYYYY %f \n", GetPosY());
+  // VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! XXXXXXXXXXXXXXX %f \n", GetPosX());
   
   //{0, 20, 30, 2, 15, 20}
   
@@ -538,17 +542,28 @@ void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variabl
 float distCalc(int nsectors, struct process_variables_t *var){
     int nsectrow = var->nsectrow; 
     float altitude = var->altitude;
+    VERBOSE_PRINT("ALTITUDE: %f", altitude);
     int npixv = var->npixv; 
     float FOV_vertical = var->FOV_vertical; 
     int npixels = (nsectrow - 1 - nsectors)*npixv;
     float dist = 0; 
+    float pitch = var->pitch;
+    float offset_due_to_pitch = altitude/tan((FOV_vertical/2)/57.2958)-altitude/tan(((FOV_vertical/2)/57.2958)-pitch);
+    float pitch_pix = (pitch/((FOV_vertical)/57.2958))*npixv*nsectrow;
+    //VERBOSE_PRINT("AMOUNT OF PIXELS %i \n", npixels);
+    //VERBOSE_PRINT("PERCENTAGE INCREASE %f \n", (pitch/(FOV_vertical/57.2958)));
+    //VERBOSE_PRINT("PITCH PIX %f", pitch_pix);
+    //VERBOSE_PRINT("width pixels %i \n", npixv*nsectrow);
+    npixels = npixels + round(pitch_pix);
+    //VERBOSE_PRINT("AMOUNT OF PIXELS %i \n", npixels);
+
     if (npixels <= 1){
         dist = 0;
     }
-    else if (npixels < 10){
-        dist = (1/(pow(0.45,(npixels/43))))-1 + altitude/tan((FOV_vertical/2)/57.2958);
-    }
-    else if (npixels < 100000){
+    // else if (npixels < 10000){
+    //     dist = (1/(pow(0.45,(npixels/60))))-1 + altitude/tan((FOV_vertical/2)/57.2958);
+    // }
+    else if (npixels < 80){
         dist = 0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels))) + altitude/tan((FOV_vertical/2)/57.2958);
     }
     if (dist > 10){
