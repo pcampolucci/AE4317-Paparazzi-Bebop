@@ -679,12 +679,12 @@ int getRealValues(float *array, struct process_variables_t *var){ //Ale Changed
     VERBOSE_PRINT("HEADING NEW %i, %f \n", i, (angle*180/pi));
     VERBOSE_PRINT("HEADING %i, %f \n",i, (heading*180/pi));
     //VERBOSE_PRINT("IF STATEMENT %i, %f \n", (i+1), (fabs(heading)+atan((width_pole/2)/distance)));
-    if (fabs(heading)+atan((width_pole/2)/distance) < FOV_hor/2){
+    if (fabs(angle)+atan((width_pole/2)/distance) < FOV_hor/2){
       poles_in_view[count] = pole_array_tot[i];
       poles_in_view[count] = pole_array_tot[i+1];
       array[count] = distance;                                   // Real Distance
-      array[count+1] = heading - atan((width_pole/2)/distance);  // Real Heading left
-      array[count+2] = heading + atan((width_pole/2)/distance);  // Real Heading right
+      array[count+1] = angle - atan((width_pole/2)/distance);  // Real Heading left
+      array[count+2] = angle + atan((width_pole/2)/distance);  // Real Heading right
       count = count + 3; 
       VERBOSE_PRINT("WE ARE INNNNNNNNNNNNNNNNNNNN \n");
     }
