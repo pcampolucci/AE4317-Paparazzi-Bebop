@@ -43,7 +43,7 @@ struct PotentialMap potential;
 /*
  * Do the actual magic
  */
-struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *current_length) {
+struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *current_length, uint8_t obstacles) {
   VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
 
   // setup initial conditions required for the optimisation
@@ -53,15 +53,15 @@ struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuC
   double gy = POS_FLOAT_OF_BFP(start_trajectory[*current_length-1].y);      // final point in y [m]
 
   // get list of obstacles that will be inserted in the optimisation
-  double *ox = malloc(sizeof(double*) * OBSTACLES_IN_MAP);
-  double *oy = malloc(sizeof(double*) * OBSTACLES_IN_MAP);
+  double *ox = malloc(sizeof(double*) * obstacles);
+  double *oy = malloc(sizeof(double*) * obstacles);
 
   // get first and last point to append to the resulting trajectory
   int last_point_index = *current_length;
   struct EnuCoor_i first_point = start_trajectory[0];
   struct EnuCoor_i last_point = start_trajectory[last_point_index-1];
 
-  for (int i = 0; i < OBSTACLES_IN_MAP; i++) {
+  for (int i = 0; i < obstacles; i++) {
     ox[i] = POS_FLOAT_OF_BFP(obstacle_map[i].loc.x);
     oy[i] = POS_FLOAT_OF_BFP(obstacle_map[i].loc.y);
     VERBOSE_PRINT("[OPTIMIZER] Obstacle in Map (%f/%f)\n", ox[i], oy[i]);

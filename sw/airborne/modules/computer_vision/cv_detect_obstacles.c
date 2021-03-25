@@ -125,7 +125,7 @@ void obstacle_detector_init(void)
   VERBOSE_PRINT("Obstacle detector initialized\n");
 
   // allocate memory for obstacle message (5 is the expected amount of obstacles to be sent in one go)
-  global_obstacle_msg.obstacles = malloc(sizeof(struct Obstacle2) * 5);
+  global_obstacle_msg.obstacles = malloc(sizeof(struct Obstacle2) * 10);
 
   #ifdef OBSTACLE_DETECTOR_CAMERA
     #ifdef OBSTACLE_DETECTOR_LUM_MIN
@@ -545,7 +545,7 @@ float distCalc(int nsectors, struct process_variables_t *var){
     }
     if (dist > 10){
         dist = 0; 
-        VERBOSE_PRINT("YOW WE ARE OUTSIDE THE CYBER ZOO \n");
+        // VERBOSE_PRINT("YOW WE ARE OUTSIDE THE CYBER ZOO \n");
     }
     return dist; 
 }
