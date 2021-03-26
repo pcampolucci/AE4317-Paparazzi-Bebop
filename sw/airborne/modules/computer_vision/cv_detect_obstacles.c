@@ -118,7 +118,7 @@ uint32_t mask_it(struct image_t *img, bool draw,
 void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie, struct process_variables_t *var);
 void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variables_t *var);
 void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var);
-float distCalc(int nsectors, struct process_variables_t *var);
+double distCalc(int nsectors, struct process_variables_t *var);
 uint8_t distAndHead(uint16_t *obstacle_array, float *input_array, struct process_variables_t *var);
 int getRealValues(float *array, struct process_variables_t *var); //ALE: Changed from void to uint8_t to int
 static struct image_t *object_detector(struct image_t *img);
@@ -562,15 +562,15 @@ void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variabl
 /*
  * Function description
  */
-float distCalc(int nsectors, struct process_variables_t *var){
+double distCalc(int nsectors, struct process_variables_t *var){
     int nsectrow = var->nsectrow; 
     float altitude = var->altitude;
     int npixv = var->npixv; 
     float FOV_vertical = var->FOV_vertical; 
     int npixels = (nsectrow - 1 - nsectors)*npixv;
-    float dist = 0; 
-    float pitch = var->pitch;
-    float pitch_pix = (pitch/((FOV_vertical)/57.2958))*npixv*nsectrow;
+    double dist = 0; 
+    double pitch = var->pitch;
+    double pitch_pix = (pitch/((FOV_vertical)/57.2958))*npixv*nsectrow;
     double p00 =  -4.045e+05;
     double p10 = 156.6;
     double p01 = 2.232e+06;
@@ -580,13 +580,13 @@ float distCalc(int nsectors, struct process_variables_t *var){
     double p21 = 0.06744;
     double p12 = 526.3 ;
     double p03 = 2.517e+06;
-    float x = 0;
-    float y = 0;
+    double x = 0;
+    double y = 0;
+    npixels = npixels + round(pitch_pix);
+    npix_dist_global = npixels; 
     x = npixels;
     y = altitude;
-    npixels = npixels + round(pitch_pix);
-    
-    npix_dist_global = npixels; 
+
     if (npixels <= 1){
         dist = 0;
     }
@@ -595,7 +595,9 @@ float distCalc(int nsectors, struct process_variables_t *var){
     // }
     else if (npixels < 300){
         //dist = 0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels))) + altitude/tan((FOV_vertical/2)/57.2958);
-        dist = p00 + p10*x + p01*y + p20*pow(x,2) + p11*x*y + p02*pow(y,2) + p21*pow(x,2)*y + p12*x*pow(y,2) + p03*pow(y,3);
+        //dist = p00 + p10*x + p01*y + p20*pow(x,2) + p11*x*y + p02*pow(y,2) + p21*pow(x,2)*y + p12*x*pow(y,2) + p03*pow(y,3) ;
+        dist = altitude*2.2*(0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels)))) + altitude/tan((FOV_vertical/2)/57.2958);
+        VERBOSE_PRINT("THE DISTANCE IN HERE IS %lf ", dist);
     }
     if (dist > 10){
         dist = 0; 
