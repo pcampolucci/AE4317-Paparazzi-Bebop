@@ -45,7 +45,8 @@ static void buildOuterTrajectory(void);
 static void buildInnerTrajectory(uint8_t currentOuterTrajIndex);
 static void moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint);
 static void checkWaypointArrival(uint8_t waypoint_target, double *mseVar);
-static bool update_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *size);
+static bool updateTrajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *size);
+static bool checkObstaclePresence(struct Obstacle *obstacle_map, int x_position, int y_position);
 
 // define and initialise global variables
 double mse_outer;                              // mean squared error to check if we reached the outer target waypoint
@@ -53,14 +54,14 @@ double mse_inner;                              // mean squared error to check if
 uint8_t outer_index = 0;                       // index of the outer waypoint the drone is moving towards
 uint8_t inner_index = 0;                       // index of the inner waypoint the drone is moving towards
 uint8_t subtraj_index = 0;                     // index of the subtrajectory the drone is using to fly
-bool trajectory_updated = false;               // check if it is safe to use the incoming trajectory
-uint8_t n_obstacles = OBSTACLES_IN_MAP;        // indicates the number of obstacles present in the map      
+bool trajectory_updated = false;               // checks if it is safe to use the incoming trajectory
+uint8_t n_obstacles = 0;        // indicates the number of obstacles currently present in the map   
+bool obstacle_map_updated = false;             // checks if there is a new obstacle and then the trajectory should be updated   
 
 // build variables for trajectories
-struct EnuCoor_i *outer_trajectory;
-struct EnuCoor_i *inner_trajectory;
-struct TrajectoryList *full_trajectory; 
-struct Obstacle *obstacle_map;
+struct EnuCoor_i outer_trajectory[OUTER_TRAJECTORY_LENGTH];
+struct TrajectoryList full_trajectory[OUTER_TRAJECTORY_LENGTH]; 
+struct Obstacle obstacle_map[MAX_OBSTACLES_IN_MAP];
 
 /*
  * This next section defines an ABI messaging event (http://wiki.paparazziuav.org/wiki/ABI), necessary
@@ -75,17 +76,36 @@ struct Obstacle *obstacle_map;
 static abi_event color_detection_ev;
 
 /* Update Obstacle Map based on Obstacle Detector Info */
-static void color_detection_cb(uint8_t __attribute__((unused)) sender_id, float distance, float left_heading, float right_heading)
+static void color_detection_cb(uint8_t __attribute__((unused)) sender_id, struct ObstacleMsg *msg)
 {
-  // if we are getting a zero value, we just ignore it
-  float origin_mse = sqrt(pow(distance,2)+pow(left_heading,2)+pow(right_heading,2));
-  if (origin_mse >= 0.0) {
-    VERBOSE_PRINT("Received valid obstacle message %f, %f, %f\n", distance, left_heading, right_heading);
-    struct EnuCoor_i absolute_position;
-    absolute_position.x = POS_BFP_OF_REAL(GetPosX() + sin(stateGetNedToBodyEulers_f()->psi) * distance);
-    absolute_position.y = POS_BFP_OF_REAL(GetPosY() + cos(stateGetNedToBodyEulers_f()->psi) * distance);
-    VERBOSE_PRINT("drone state (psi, x, y): %f %f %f\n", stateGetNedToBodyEulers_f()->psi, GetPosX(), GetPosY());
-    VERBOSE_PRINT("obstacle absolute : %f %f\n", POS_FLOAT_OF_BFP(absolute_position.x), POS_FLOAT_OF_BFP(absolute_position.y));
+  //VERBOSE_PRINT("Received a message of size %d\n", msg->size);
+
+  for (int i=0; i < msg->size; i++){
+      // if we are getting a zero value, we just ignore it
+      if (msg->obstacles[i].distance == 0) {
+        msg->obstacles[i].distance = 0.5;
+      }
+    float obstacle_mse = sqrt(pow(msg->obstacles[i].distance,2)+pow(msg->obstacles[i].left_heading,2)+pow(msg->obstacles[i].right_heading,2));
+    if (obstacle_mse >= 0.0) {
+      //VERBOSE_PRINT("Received valid obstacle message %f, %f, %f\n", msg->obstacles[i].distance, msg->obstacles[i].left_heading, msg->obstacles[i].right_heading);
+      struct EnuCoor_i absolute_position;
+      double heading = RadOfDeg((msg->obstacles[i].left_heading + msg->obstacles[i].right_heading)/2);
+      absolute_position.x = POS_BFP_OF_REAL(GetPosX() + sin(heading + stateGetNedToBodyEulers_f()->psi) * msg->obstacles[i].distance);
+      absolute_position.y = POS_BFP_OF_REAL(GetPosY() + cos(heading + stateGetNedToBodyEulers_f()->psi) * msg->obstacles[i].distance);
+      bool obstacle_already_in = checkObstaclePresence(obstacle_map, absolute_position.x, absolute_position.y);
+      //VERBOSE_PRINT("drone state (psi, x, y, z): %f %f %f %f\n", stateGetNedToBodyEulers_f()->psi, GetPosX(), GetPosY(), GetPosAlt());
+      //VERBOSE_PRINT("obstacle absolute : %f %f\n", POS_FLOAT_OF_BFP(absolute_position.x), POS_FLOAT_OF_BFP(absolute_position.y));
+
+      if (!obstacle_already_in && n_obstacles < MAX_OBSTACLES_IN_MAP) {
+        VERBOSE_PRINT("New Obstacle at: %f/%f, new size is %d\n", POS_FLOAT_OF_BFP(absolute_position.x), POS_FLOAT_OF_BFP(absolute_position.y), n_obstacles+1);
+        // the obstacle is not in yet, we can add a new slot to the obstacle map
+        n_obstacles += 1;
+        // populate the new slot
+        obstacle_map[n_obstacles-1].loc.x = absolute_position.x;
+        obstacle_map[n_obstacles-1].loc.y = absolute_position.y;
+        obstacle_map_updated = true;
+      }
+    }
   }
 }
 
@@ -94,13 +114,6 @@ static void color_detection_cb(uint8_t __attribute__((unused)) sender_id, float 
  */
 void orange_avoider_init(void)
 {
-
-  // Build arrays (trajectory and obstacle) with initial memory alloaction
-  outer_trajectory = malloc(sizeof(struct EnuCoor_i) * OUTER_TRAJECTORY_LENGTH);
-  obstacle_map = malloc(sizeof(struct Obstacle) * OBSTACLES_IN_MAP);
-
-  // Populate the outer trajectory with inner trajectories (one for index)
-  full_trajectory = malloc(sizeof(struct TrajectoryList) * OUTER_TRAJECTORY_LENGTH);
 
   for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++) {
     full_trajectory[i].inner_trajectory = malloc(sizeof(struct EnuCoor_i) * INNER_TRAJECTORY_LENGTH);
@@ -125,18 +138,24 @@ void orange_avoider_init(void)
  */
 void orange_avoider_periodic(void)
 {
-  // Starting subtrajectory gets modified based on the presence of obstacles in the map
+  // Starting subtrajectory gets modified based on the presence of msg in the map
   clock_t t_periodic; 
   t_periodic = clock();
 
   // only evaluate our state machine if we are flying
-  // if(!autopilot_in_flight()){
-  //   return;
-  // }
+  if(!autopilot_in_flight()){
+    return;
+  }
 
   // Check how close we are from the targets
   checkWaypointArrival(WP_OUTER, &mse_outer);      // Calculate how close it is from the next outer waypoint
   checkWaypointArrival(WP_INNER, &mse_inner);      // Calculate how close it is from the next inner waypoint
+
+  // check if a new obstacle has been added to the map
+  if (obstacle_map_updated) {
+    updateTrajectory(obstacle_map, full_trajectory[subtraj_index].inner_trajectory, &full_trajectory[subtraj_index].size);
+    obstacle_map_updated = false;
+  }
 
   if (mse_inner < 0.15 && trajectory_updated){
 
@@ -171,7 +190,7 @@ void orange_avoider_periodic(void)
     // move to the next waypoint
     moveWaypointNext(WP_OUTER, outer_trajectory, outer_index);
 
-    trajectory_updated = update_trajectory(obstacle_map, full_trajectory[subtraj_index].inner_trajectory, &full_trajectory[subtraj_index].size);
+    trajectory_updated = updateTrajectory(obstacle_map, full_trajectory[subtraj_index].inner_trajectory, &full_trajectory[subtraj_index].size);
 
   }
 
@@ -186,10 +205,10 @@ void orange_avoider_periodic(void)
 /*
  * Increases the NAV heading. Assumes heading is an INT32_ANGLE. It is bound in this function.
  */
-bool update_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *size) {
+bool updateTrajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *size) {
   clock_t t_trajectory; 
   t_trajectory = clock();
-  struct EnuCoor_i *new_inner = optimize_trajectory(obstacle_map, start_trajectory, size);
+  struct EnuCoor_i *new_inner = optimize_trajectory(obstacle_map, start_trajectory, size, n_obstacles);
   full_trajectory[subtraj_index].inner_trajectory = realloc(full_trajectory[subtraj_index].inner_trajectory, sizeof(struct EnuCoor_i) * *size);
   full_trajectory[subtraj_index].inner_trajectory = new_inner;
   t_trajectory = clock() - t_trajectory; 
@@ -276,3 +295,23 @@ void buildInnerTrajectory(uint8_t outer_index){
   VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
 }
 
+/*
+ * Checks if the obstacle being sent is already present in the map
+ */
+bool checkObstaclePresence(struct Obstacle *obstacle_map, int x_position, int y_position) {
+  
+  for (int i=0; i < n_obstacles; i++) {
+    // is the current obstacle close enough to an already existing one?
+    double error_x = POS_FLOAT_OF_BFP(obstacle_map[i].loc.x - x_position);
+    double error_y = POS_FLOAT_OF_BFP(obstacle_map[i].loc.y - y_position);
+    double obstacle_mse = sqrt(pow(error_x,2)+pow(error_y,2));
+    //VERBOSE_PRINT("Obstacle MSE is %f with %d/%d/%d/%d\n", obstacle_mse, obstacle_map[i].loc.x, obstacle_map[i].loc.y, x_position, y_position);
+    if (obstacle_mse < 1 || obstacle_mse != obstacle_mse) {
+      // then we most likely have already detected this obstacle or we have no useful information
+      return true;
+    }
+  }
+
+  // if we get here, the obstacle can be added to the map as not yet detected
+  return false;
+}

@@ -97,9 +97,7 @@
     </message>
 
     <message name="OBSTACLE_DETECTION" id="17">
-      <field name="distance" type="float" unit="m"/>
-      <field name="left_heading" type="float" unit="rad"/>
-      <field name="right_heading" type="float" unit="rad"/>
+      <field name="obstacles" type="struct ObstacleMsg *"/>
     </message>
 
     <message name="POSITION_ESTIMATE" id="18">

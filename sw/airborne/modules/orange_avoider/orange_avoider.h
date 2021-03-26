@@ -19,14 +19,24 @@
 // Local constants
 #define OUTER_TRAJECTORY_LENGTH 3
 #define INNER_TRAJECTORY_LENGTH 5
-#define OBSTACLES_IN_MAP 0
+#define MAX_OBSTACLES_IN_MAP 20
+#define MAX_OBSTACLES_IN_MSG 5
 
 // Obstacle struct used for optimization and avoidance
 struct Obstacle {
   struct EnuCoor_i loc;
   double width;
-  double heading;
-  double depth;
+};
+
+struct Obstacle2 {
+  double distance;
+  double left_heading;
+  double right_heading;
+};
+
+struct ObstacleMsg {
+  uint8_t size;
+  struct Obstacle2 *obstacles;
 };
 
 // motion increment point

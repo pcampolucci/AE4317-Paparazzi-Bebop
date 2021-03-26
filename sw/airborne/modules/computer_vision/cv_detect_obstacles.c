@@ -27,6 +27,7 @@
 
 // Own header
 #include "modules/computer_vision/cv_detect_obstacles.h"
+#include "modules/orange_avoider/orange_avoider.h"
 #include "modules/computer_vision/cv.h"
 #include "firmwares/rotorcraft/navigation.h"
 #include "subsystems/abi.h"
@@ -97,17 +98,19 @@ struct process_variables_t {
 
 struct process_variables_t process_variables; 
 
-struct obstacle_message_t {
-  float distance;
-  float left_heading;
-  float right_heading;
-};
+// struct obstacle_message_t {
+//   float distance;
+//   float left_heading;
+//   float right_heading;
+// };
+
+// struct obstacle_message_t global_obstacle_msg;
 
 int npix_dist_global = 0;  // Used to log the data 
 int npix_headl_global = 0;  // Used to log the data 
 int npix_headr_global = 0;  // Used to log the data 
 
-struct obstacle_message_t global_obstacle_msg;
+struct ObstacleMsg global_obstacle_msg;
 
 // Function declaration
 uint32_t mask_it(struct image_t *img, bool draw,
@@ -128,6 +131,9 @@ void obstacle_detector_init(void)
   memset(global_filters, 0, 2*sizeof(struct color_object_t));
   pthread_mutex_init(&mutex, NULL);
   //VERBOSE_PRINT("Obstacle detector initialized\n");     ALE: UNCOMMENT LATER!!!!!!!!!!!!!!!!!!!!
+
+  // allocate memory for obstacle message (5 is the expected amount of obstacles to be sent in one go)
+  global_obstacle_msg.obstacles = malloc(sizeof(struct Obstacle2) * 10);
 
   #ifdef OBSTACLE_DETECTOR_CAMERA
     #ifdef OBSTACLE_DETECTOR_LUM_MIN
@@ -152,9 +158,7 @@ void obstacle_detector_periodic(void)
   pthread_mutex_lock(&mutex);
   memcpy(local_filters, global_filters, 2*sizeof(struct color_object_t));
   pthread_mutex_unlock(&mutex);
-  AbiSendMsgOBSTACLE_DETECTION(OBSTACLE_DETECTION_ID, global_obstacle_msg.distance,
-                                                      global_obstacle_msg.left_heading, 
-                                                      global_obstacle_msg.right_heading);
+  AbiSendMsgOBSTACLE_DETECTION(OBSTACLE_DETECTION_ID, &global_obstacle_msg);
 }
 
 /*
@@ -248,27 +252,8 @@ static struct image_t *object_detector(struct image_t *img)
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   //clock_t distAndHead_1 = clock();
   n_obst = distAndHead(obstacle_array, output_array, &process_variables);
-  //clock_t distAndHead_2 = clock();
-  //VERBOSE_PRINT("!!!!!!!!!!!!!!!!!!!!!!DistAndHead TIME (MILISECONDS) %f \n",(double)(distAndHead_2 - distAndHead_1)*1000 / CLOCKS_PER_SEC);
-
-  //VERBOSE_PRINT("Number of obstacles is %i \n", n_obst);
-  //VERBOSE_PRINT("ESTIMATED 1 IS %f, %f, %f \n", output_array[0], output_array[1], output_array[2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
-  //VERBOSE_PRINT("ESTIMATED 2 IS %f, %f, %f \n", output_array[3], output_array[4], output_array[5]);
-  //VERBOSE_PRINT("ESTIMATED 3 IS %f, %f, %f \n", output_array[6], output_array[7], output_array[8]);
-  //VERBOSE_PRINT("ESTIMATED 2 IS %f, %f, %f \n", output_array[9], output_array[10], output_array[11]);
 
   n_obstReal = getRealValues(output_array_real,&process_variables);
-  //VERBOSE_PRINT("REAL OBSTACLE NUMBER IS %i \n", n_obstReal);
-  //VERBOSE_PRINT("REAL 1 IS %f, %f, %f \n", output_array_real[0], output_array_real[1], output_array_real[2]);
-  //VERBOSE_PRINT("REAL 2 IS %f, %f, %f \n", output_array_real[3], output_array_real[4], output_array_real[5]);
-  //VERBOSE_PRINT("REAL 3 IS %f, %f, %f \n", output_array_real[6], output_array_real[7], output_array_real[8]);
-  //VERBOSE_PRINT("REAL 4 IS %f, %f, %f \n", output_array_real[9], output_array_real[10], output_array_real[11]);
-  //VERBOSE_PRINT("REAL 5 IS %f, %f, %f \n", output_array_real[12], output_array_real[13], output_array_real[14]);
-  
-  //VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! YAWWWWWWWWWWWWW %f \n", stateGetNedToBodyEulers_f()->psi);
-  //VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! XXXXXXXXXXXXXXX %f \n", GetPosX());
-  //VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! YYYYYYYYYYYYYYY %f \n", GetPosY());
-  //VERBOSE_PRINT("CHECK THIS OUT!!!!!!!!!! XXXXXXXXXXXXXXX %f \n", GetPosX());
   
 
   //ALE DATA ANALYSIS
@@ -280,9 +265,19 @@ static struct image_t *object_detector(struct image_t *img)
   //{0, 20, 30, 2, 15, 20}
   
   // update the obstacle message 
-  global_obstacle_msg.distance = output_array[0];
-  global_obstacle_msg.left_heading = output_array[1];
-  global_obstacle_msg.right_heading = output_array[2];
+
+  // update message size
+  global_obstacle_msg.size = n_obst;
+
+  // start to override the previous message
+  for (int i=0; i < n_obst; i++) {
+    global_obstacle_msg.obstacles[i].distance = output_array[3*i];
+    global_obstacle_msg.obstacles[i].left_heading = output_array[3*i+1];
+    global_obstacle_msg.obstacles[i].right_heading = output_array[3*i+2];
+  }
+
+  // if we have more then expected, we can reallocate memory and expand the message
+  // TODO
 
   pthread_mutex_lock(&mutex);
   global_filters[0].color_count =count;
@@ -353,7 +348,7 @@ void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie, struct pr
  */
 void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variables_t *var)
 {
-  //VERBOSE_PRINT("Going into getObstacles \n"); ALE: UNCOMENT LATER!!!!!!!!!!!!!!!!!!!!!!!
+
   int nsectrow = var->nsectcol; 
   int nsectcol = var->nsectrow;
   // int npixh = var->npixh;
@@ -363,7 +358,7 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
   // int obs_counter         = 0;
   int obs_1[50][3]        ={0};
   int rewriter = 0,rewriter2  = 0;
-  int p,pnew,count1       =0;
+  int p,pnew,count1,io       =0;
   int minl,maxr,cr        = 0;
 
   for(int i=0;i<50;i++)
@@ -453,7 +448,8 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
                       cr = obs_1[j][0];   
                   }
                              
-              }    
+              }  
+
           }
           // printf("O U T P U T i %i, cr %i, minl %i, maxr %i \n\n",i,cr,minl,maxr);
           if(rewriter2==0 && minl < maxr && cr!=0){
@@ -465,47 +461,103 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
             minl=0;
             maxr=0; 
           }
-          else{
-              if(obs_2[(rewriter2-1)*3+0]<= cr){
-                  if(obs_2[(rewriter2-1)*3+1]<=minl && obs_2[(rewriter2-1)*3+2]>=maxr){ //inside previous overlap
+          else if (cr!=0){
+              
+                  if(obs_2[(rewriter2-1)*3+1]<=minl && obs_2[(rewriter2-1)*3+2]>=maxr && cr!=0 && minl!=0 && maxr!=0){ //inside previous overlap
                     obs_2[(rewriter2-1)*3+0]=cr;
                     cr=0;
                     minl=0;
                     maxr=0;
                     // rewriter2 += 1; 
-                    // VERBOSE_PRINT("I am likely messing us here!!! %i \n", rewriter2);
+                    VERBOSE_PRINT("skipping contained lines! %i \n", rewriter2);
                   }
-                  else if(obs_2[(rewriter2-1)*3+1]>minl && obs_2[(rewriter2-1)*3+2]>=maxr &&obs_2[(rewriter2-1)*3+1]<=maxr){ //overlap left
+                  else if(obs_2[(rewriter2-1)*3+1]>minl && obs_2[(rewriter2-1)*3+2]>=maxr &&obs_2[(rewriter2-1)*3+1]<=maxr && cr!=0 && minl!=0 && maxr!=0){ //overlap left
                     obs_2[(rewriter2-1)*3+0]=cr;
                     obs_2[(rewriter2-1)*3+1]=minl;
                     
-                    // VERBOSE_PRINT("increasing left boundary %i \n", rewriter2);
-                    rewriter2 +=1;
+                    VERBOSE_PRINT("increasing left boundary %i \n", rewriter2);
+                    // rewriter2 +=1;
                     cr=0;
                     minl=0;
                     maxr=0; 
                   }
-                  else if (obs_2[(rewriter2-1)*3+1]<=minl && obs_2[(rewriter2-1)*3+2]<maxr && obs_2[(rewriter2-1)*3+2]>=minl) {  //overlapping right
+                  else if (obs_2[(rewriter2-1)*3+1]<=minl && obs_2[(rewriter2-1)*3+2]<maxr && obs_2[(rewriter2-1)*3+2]>=minl && cr!=0 && minl!=0 && maxr!=0) {  //overlapping right
                     obs_2[(rewriter2-1)*3+0]=cr;
                     
                     obs_2[(rewriter2-1)*3+2]=maxr;
-                    // VERBOSE_PRINT("increasing right boundary %i \n", rewriter2);
-                    rewriter2 +=1;
+                    VERBOSE_PRINT("increasing right boundary %i \n", rewriter2);
+                    // rewriter2 +=1;
                     cr=0;
                     minl=0;
                     maxr=0; 
                   } 
-                  else if (obs_2[(rewriter2-1)*3+2]<minl || obs_2[(rewriter2-1)*3+1]<maxr) {  //new or seperate detect ?
+                  else if (obs_2[(rewriter2-1)*3+2]<minl && cr!=0 && minl!=0 && maxr!=0) {  //new or seperate detect ?
+                    
                     obs_2[(rewriter2)*3+0]=cr;
                     obs_2[(rewriter2)*3+1]=minl;
                     obs_2[(rewriter2)*3+2]=maxr;
-                    // VERBOSE_PRINT("Adding a new Pole? %i \n", rewriter2);
+                    VERBOSE_PRINT("Adding a new Pole Right %i \n", rewriter2);
                     rewriter2 +=1;
                     cr=0;
                     minl=0;
                     maxr=0; 
+                    }
+                    
+
                   }
-                }                 
+                  else if (obs_2[(rewriter2-1)*3+1]>maxr && cr!=0 && minl!=0 && maxr!=0) {  //new or seperate detect ?
+                    
+                    
+                    obs_2[(rewriter2)*3+0]=cr;
+                    obs_2[(rewriter2)*3+1]=minl;
+                    obs_2[(rewriter2)*3+2]=maxr;
+                    VERBOSE_PRINT("Adding a new Pole Left %i \n", rewriter2);
+                    rewriter2 +=1;
+                    cr=0;
+                    minl=0;
+                    maxr=0; 
+                    
+
+                  // }
+                  // else{
+                  //   printf("the cool new else");
+                  // int currmin = obs_2[1];
+                  // int currmax = obs_2[2];
+                  // for (io=0; io<rewriter2; io++){
+                  //   if (obs_2[io*3+1]<currmin){
+                  //     currmin = obs_2[io*3+1];
+                  //   }
+                  //   if (obs_2[io*3+2]>currmax){
+                  //     currmax = obs_2[io*3+2];
+                  //   }
+                  // }
+                  // if (currmax < minl){
+                  //   obs_2[(rewriter2)*3+0]=cr;
+                  //   obs_2[(rewriter2)*3+1]=minl;
+                  //   obs_2[(rewriter2)*3+2]=maxr;
+                  //   rewriter2 +=1;
+                  //   cr=0;
+                  //   minl=0;
+                  //   maxr=0; 
+                  //   printf("i should add a new pole Right ");
+
+                  // }
+                  // if (currmin > maxr){
+                  //   obs_2[(rewriter2)*3+0]=cr;
+                  //   obs_2[(rewriter2)*3+1]=minl;
+                  //   obs_2[(rewriter2)*3+2]=maxr;
+                  //   rewriter2 +=1;
+                  //   cr=0;
+                  //   minl=0;
+                  //   maxr=0; 
+                  //   printf("i should add a new pole LEft ");
+
+
+                  // }
+                  // currmin = 0;
+                  // currmax =0;
+
+                  // }            
               
                      
               }
@@ -601,7 +653,6 @@ double distCalc(int nsectors, struct process_variables_t *var){
     }
     if (dist > 10){
         dist = 0; 
-        //VERBOSE_PRINT("YOW WE ARE OUTSIDE THE CYBER ZOO \n"); ALE: UNCOMENT LATER!!!!!!!!!!!!!!!
     }
     return dist; 
 }
@@ -628,7 +679,6 @@ uint8_t distAndHead(uint16_t *obstacle_array, float *input_array, struct process
         input_headl = obstacle_array[i+1];
         input_headr = obstacle_array[i+2]; 
         int sum = input_dist + input_headl + input_headr;
-        //VERBOSE_PRINT("SUM IS EQUAL %i", sum); ALE: UNCOMENT LATER!!!!!!!!!!!!!!!!!!!!!!!
         if (sum == 0){
             break; 
         }
