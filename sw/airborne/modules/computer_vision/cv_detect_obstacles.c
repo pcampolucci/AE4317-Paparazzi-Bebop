@@ -37,7 +37,7 @@
 #include <stdbool.h>
 #include <math.h>
 #include "pthread.h"
-
+#include <time.h>
 
 
 #define MASK_IT_VERBOSE TRUE
@@ -45,6 +45,8 @@
 #define COL_OBST 3
 #define ROW_OUT 20
 #define COL_OUT 3
+#define N_OBST 4 //ALE CHANGED 
+#define pi 3.1415
 
 #define PRINT(string,...) fprintf(stderr, "[mask_it->%s()] " string,__FUNCTION__ , ##__VA_ARGS__)
 #if MASK_IT_VERBOSE
@@ -91,6 +93,7 @@ struct process_variables_t {
   int nsectcol;
   int nsectrow;
   float altitude; 
+  float pitch; 
 };
 
 struct process_variables_t process_variables; 
@@ -103,6 +106,10 @@ struct process_variables_t process_variables;
 
 // struct obstacle_message_t global_obstacle_msg;
 
+int npix_dist_global = 0;  // Used to log the data 
+int npix_headl_global = 0;  // Used to log the data 
+int npix_headr_global = 0;  // Used to log the data 
+
 struct ObstacleMsg global_obstacle_msg;
 
 // Function declaration
@@ -114,15 +121,16 @@ uint32_t mask_it(struct image_t *img, bool draw,
 void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie, struct process_variables_t *var);
 void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variables_t *var);
 void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variables_t *var);
-float distCalc(int nsectors, struct process_variables_t *var);
+double distCalc(int nsectors, struct process_variables_t *var);
 uint8_t distAndHead(uint16_t *obstacle_array, float *input_array, struct process_variables_t *var);
+int getRealValues(float *array, struct process_variables_t *var); //ALE: Changed from void to uint8_t to int
 static struct image_t *object_detector(struct image_t *img);
 
 void obstacle_detector_init(void)
 {
   memset(global_filters, 0, 2*sizeof(struct color_object_t));
   pthread_mutex_init(&mutex, NULL);
-  VERBOSE_PRINT("Obstacle detector initialized\n");
+  //VERBOSE_PRINT("Obstacle detector initialized\n");     ALE: UNCOMMENT LATER!!!!!!!!!!!!!!!!!!!!
 
   // allocate memory for obstacle message (5 is the expected amount of obstacles to be sent in one go)
   global_obstacle_msg.obstacles = malloc(sizeof(struct Obstacle2) * 10);
@@ -175,6 +183,7 @@ static struct image_t *object_detector(struct image_t *img)
   uint32_t img_w = img->w;
   uint32_t img_h = img->h; 
   uint8_t n_obst = 0; // number of obstacles
+  uint8_t n_obstReal = 0; //number of real obstacles in FOV
 
   uint32_t len_pic = img_w*img_h;
   // int32_t x_c, y_c;
@@ -186,9 +195,10 @@ static struct image_t *object_detector(struct image_t *img)
   process_variables.npixv = 5;
   process_variables.nsectcol = img_h/(process_variables.npixv);
   process_variables.nsectrow = img_w/(process_variables.npixh);
-  process_variables.FOV_horizontal = 110;
+  process_variables.FOV_horizontal = 1.850049; //[rad], equivalent to 106 degrees
   process_variables.FOV_vertical = 52.3024;
   process_variables.altitude = GetPosAlt();
+  process_variables.pitch = stateGetNedToBodyEulers_f()->theta; 
 
   // Define arrays needed for the processing
   uint8_t masked_frame_f[len_pic];
@@ -197,12 +207,16 @@ static struct image_t *object_detector(struct image_t *img)
   uint16_t obstacle_array[ROW_OBST*COL_OBST]; 
   memset(obstacle_array, 0, ROW_OBST*COL_OBST*sizeof(uint16_t));
   float output_array[ROW_OUT*ROW_OUT];
+  float output_array_real[ROW_OUT*ROW_OUT];
   memset(output_array, 0, ROW_OUT*COL_OUT*sizeof(float));
 
   //VERBOSE_PRINT("check me bitch 1= %d\n", masked_frame_f[50000]);
 
   // Filter and find centroid
+  //clock_t maskit_1 = clock();
   uint32_t count = mask_it(img, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame_f);
+  //clock_t maskit_2 = clock();
+  //VERBOSE_PRINT("!!!!!!!!!!!!!!!!!!!!!!MASK IT TIME (MILISECONDS) %f \n",(double)(maskit_2 - maskit_1)*1000 / CLOCKS_PER_SEC);
   // VERBOSE_PRINT("Color count %d: %u, threshold %u, x_c %d, y_c %d\n", camera, object_count, count_threshold, x_c, y_c);
   // VERBOSE_PRINT("centroid %d: (%d, %d) r: %4.2f a: %4.2f\n", camera, x_c, y_c,
   //       hypotf(x_c, y_c) / hypotf(img->w * 0.5, img->h * 0.5), RadOfDeg(atan2f(y_c, x_c)));
@@ -215,25 +229,39 @@ static struct image_t *object_detector(struct image_t *img)
   //    }
   //    VERBOSE_PRINT("\n");
   //  }
+  //clock_t blackArray_1 = clock();
   getBlackArray(0.8, masked_frame_f, black_array, &process_variables);  // Make threshold slider
-  
+  //clock_t blackArray_2 = clock();
+  //VERBOSE_PRINT("!!!!!!!!!!!!!!!!!!!!!!BlackArray TIME (MILISECONDS) %f \n",(double)(blackArray_2 - blackArray_1)*1000 / CLOCKS_PER_SEC);
+  //getRealValues(output_array_real,&process_variables);
   // for (int iii=0;iii<process_variables.nsectrow;iii++){
   //   for(int iv=0;iv<process_variables.nsectcol;iv++){
   //     VERBOSE_PRINT("%i ",black_array[iii*process_variables.nsectcol + iv]);
   //   }
   //   VERBOSE_PRINT("\n");
   // }
+  //clock_t getObstacles_1 = clock();
   getObstacles(black_array, obstacle_array, &process_variables);
-  for (int i=0 ; i<10; i++){
-    VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
+  //clock_t getObstacles_2 = clock();
+  //VERBOSE_PRINT("!!!!!!!!!!!!!!!!!!!!!!GetObstacles TIME (MILISECONDS) %f \n",(double)(getObstacles_2 - getObstacles_1)*1000 / CLOCKS_PER_SEC);
 
-  }
+  //NEXT 3 LINES COMENTED OUT BY ALE
+  //for (int i=0 ; i<10; i++){
+  //  VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
+  //}
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
+  //clock_t distAndHead_1 = clock();
   n_obst = distAndHead(obstacle_array, output_array, &process_variables);
-  // VERBOSE_PRINT("Number of obstacles is %i", n_obst);
-  // VERBOSE_PRINT("OUTPUT 1 IS %f, %f, %f \n", output_array[0], output_array[1], output_array[2]);  // Entry 0: distance, Entry 1: headingleft, Entry 2: headingright
-  // VERBOSE_PRINT("OUTPUT 2 IS %f, %f, %f \n", output_array[3], output_array[4], output_array[5]);
+
+  n_obstReal = getRealValues(output_array_real,&process_variables);
   
+
+  //ALE DATA ANALYSIS
+  if (n_obstReal == 1)
+  {
+    VERBOSE_PRINT("OBSTACLE DETECTOR OUTPUT %i, %i, %i, %i, %i, %i \n", obstacle_array[0], obstacle_array[1], obstacle_array[2], obstacle_array[3], obstacle_array[4], obstacle_array[5]);
+    VERBOSE_PRINT("COMPARISON %f, %f, %i, %i, %i, %f, %f, %f, %f \n", process_variables.altitude, process_variables.pitch, npix_dist_global, npix_headl_global, npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2], output_array[0]);
+  }
   //{0, 20, 30, 2, 15, 20}
   
   // update the obstacle message 
@@ -320,7 +348,7 @@ void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie, struct pr
  */
 void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variables_t *var)
 {
-  //VERBOSE_PRINT("Going into getObstacles \n");
+
   int nsectrow = var->nsectcol; 
   int nsectcol = var->nsectrow;
   // int npixh = var->npixh;
@@ -558,7 +586,7 @@ void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variabl
     int l_pixels = (l_sec+1)*npixh;
     int r_pixels = r_sec * npixh;
     float FOV_H = var->FOV_horizontal;
-    float factor = 0.2023;
+    float factor = 0.2023*pi/180;
     float heading_l =0; 
     float heading_r =0; 
 
@@ -578,31 +606,53 @@ void headingCalc(int l_sec, int r_sec, float *head_array, struct process_variabl
         heading_r = factor * (r_pixels - (width_pic / 2));
         head_array[1] = heading_r;
     }
+    npix_headl_global = l_pixels;
+    npix_headr_global = r_pixels;
     //return 0; //QUESTION: why return 0??
 }
 
 /*
  * Function description
  */
-float distCalc(int nsectors, struct process_variables_t *var){
+double distCalc(int nsectors, struct process_variables_t *var){
     int nsectrow = var->nsectrow; 
     float altitude = var->altitude;
     int npixv = var->npixv; 
     float FOV_vertical = var->FOV_vertical; 
     int npixels = (nsectrow - 1 - nsectors)*npixv;
-    float dist = 0; 
+    double dist = 0; 
+    double pitch = var->pitch;
+    double pitch_pix = (pitch/((FOV_vertical)/57.2958))*npixv*nsectrow;
+    double p00 =  -4.045e+05;
+    double p10 = 156.6;
+    double p01 = 2.232e+06;
+    double p20 = -0.03603;
+    double p11 = -574.2;
+    double p02 = -4.105e+06;
+    double p21 = 0.06744;
+    double p12 = 526.3 ;
+    double p03 = 2.517e+06;
+    double x = 0;
+    double y = 0;
+    npixels = npixels + round(pitch_pix);
+    npix_dist_global = npixels; 
+    x = npixels;
+    y = altitude;
+
     if (npixels <= 1){
         dist = 0;
     }
-    else if (npixels < 10){
-        dist = (1/(pow(0.45,(npixels/43))))-1 + altitude/tan((FOV_vertical/2)/57.2958);
-    }
-    else if (npixels < 100000){
-        dist = 0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels))) + altitude/tan((FOV_vertical/2)/57.2958);
+    // else if (npixels < 10000){
+    //     dist = (1/(pow(0.45,(npixels/60))))-1 + altitude/tan((FOV_vertical/2)/57.2958);
+    // }
+    else if (npixels < 300){
+        //dist = 0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels))) + altitude/tan((FOV_vertical/2)/57.2958);
+        //dist = p00 + p10*x + p01*y + p20*pow(x,2) + p11*x*y + p02*pow(y,2) + p21*pow(x,2)*y + p12*x*pow(y,2) + p03*pow(y,3) ;
+        dist = altitude*2.2*(0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels)))) + altitude/tan((FOV_vertical/2)/57.2958);
+        VERBOSE_PRINT("THE DISTANCE IN HERE IS %lf ", dist);
     }
     if (dist > 10){
         dist = 0; 
-        // VERBOSE_PRINT("YOW WE ARE OUTSIDE THE CYBER ZOO \n");
     }
     return dist; 
 }
@@ -629,7 +679,6 @@ uint8_t distAndHead(uint16_t *obstacle_array, float *input_array, struct process
         input_headl = obstacle_array[i+1];
         input_headr = obstacle_array[i+2]; 
         int sum = input_dist + input_headl + input_headr;
-        // VERBOSE_PRINT("SUM IS EQUAL %i", sum);
         if (sum == 0){
             break; 
         }
@@ -645,7 +694,77 @@ uint8_t distAndHead(uint16_t *obstacle_array, float *input_array, struct process
         obst_counter++; 
     }
     return obst_counter; 
+} 
+
+
+int getRealValues(float *array, struct process_variables_t *var){ //Ale Changed
+  // Get the coordinates
+  //float pole_array_tot[N_OBST*2] = {-0.05, -1.9, 3.6, -0.15, 0.4, 0.3, -3.3, 0.2};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
+  float pole_array_tot[N_OBST*2] = {-1.8, -3.4, -1.8, 0.5, 1.5, -2.5, 2.8, 2.5};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
+  //float pole_array_tot[N_OBST*2] = {-1.8, 0.5};
+  float poles_in_view[N_OBST*2]; 
+  float drone_posx = GetPosX();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->y
+  float drone_posy = GetPosY();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->x
+  float drone_posz = GetPosAlt(); 
+  float drone_yaw = stateGetNedToBodyEulers_f()->psi; 
+  float heading_old = 0; 
+  float heading_sign = 0;
+  float heading = 0;
+  float FOV_hor = var->FOV_horizontal; 
+  int count = 0; //changed to int
+  float width_pole = 0.2; 
+  float distance = 0; 
+  float angle = 0;
+
+  float ax = 0;
+  float ay = 0;
+  float bx = 0;
+  float by = 0;
+  
+  // Get the poles in view
+  for (int i=0; i<N_OBST*2; i=i+2){
+    //Replaced heading function
+    //                pole_x             drone_x      pole_y              drone_y           yaw
+    heading_sign  = atan((pole_array_tot[i]-drone_posx)/(pole_array_tot[i+1]-drone_posy)) + (- drone_yaw); //this is used to calcuated sign of the angle (heading2/fabs(heading2)) gives 1 or -1
+    distance = sqrt(pow((drone_posx-pole_array_tot[i]),2) + pow((drone_posy-pole_array_tot[i+1]),2));  // Real Distance
+    //VERBOSE_PRINT("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII is equal TOOOOOOOO %i", i);
+    //Formula for angle between two vectors
+    //nominator = (distance*sin(drone_yaw)-drone_posx)*(pole_array_tot[i]-drone_posx)+(distance*cos(drone_yaw)-drone_posy)*(pole_array_tot[i+1]-drone_posy)
+    //denominator = sqrt(pow((distance*sin(drone_yaw)-drone_posx),2)+pow((distance*cos(drone_yaw)-drone_posy),2))*sqrt(pow((pole_array_tot[i]-drone_posx),2)+pow((pole_array_tot[i+1]-drone_posy),2))
+    heading_old = acos(((distance*sin(drone_yaw)-drone_posx)*(pole_array_tot[i]-drone_posx)+(distance*cos(drone_yaw)-drone_posy)*(pole_array_tot[i+1]-drone_posy))/(sqrt(pow((distance*sin(drone_yaw)-drone_posx),2)+pow((distance*cos(drone_yaw)-drone_posy),2))*sqrt(pow((pole_array_tot[i]-drone_posx),2)+pow((pole_array_tot[i+1]-drone_posy),2))));
+    //         ^ this bracket stuff gives negative if to the left of the drone
+    ax = (distance*sin(drone_yaw)-drone_posx);
+    by = (pole_array_tot[i+1]-drone_posy);
+    ay =(distance*cos(drone_yaw)-drone_posy);
+    bx = (pole_array_tot[i]-drone_posx);
+    angle = -atan2( ax*by - ay*bx, ax*bx + ay*by );
+    
+    if (heading<(pi/2)){
+      heading = heading_old*(heading_sign/fabs(heading_sign));
+    }
+    else{
+      heading = -heading_old*(heading_sign/fabs(heading_sign));
+    }
+
+    //VERBOSE_PRINT("HEADING NEW %i, %f \n", i, (angle*180/pi));
+    //VERBOSE_PRINT("HEADING %i, %f \n",i, (heading*180/pi));
+    //VERBOSE_PRINT("IF STATEMENT %i, %f \n", (i+1), (fabs(heading)+atan((width_pole/2)/distance)));
+    if (fabs(angle)+atan((width_pole/2)/distance) < FOV_hor/2){
+      poles_in_view[count] = pole_array_tot[i];
+      poles_in_view[count] = pole_array_tot[i+1];
+      array[count] = distance;                                   // Real Distance
+      array[count+1] = angle - atan((width_pole/2)/distance);  // Real Heading left
+      array[count+2] = angle + atan((width_pole/2)/distance);  // Real Heading right
+      count = count + 3; 
+      //VERBOSE_PRINT("WE ARE INNNNNNNNNNNNNNNNNNNN \n");
+    }
+  }
+  return (count/3); //removed /3
 }
+
+
+
+
 
 /*
  * Function description
