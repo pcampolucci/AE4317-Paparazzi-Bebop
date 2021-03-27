@@ -74,6 +74,12 @@ bool cod_draw = false;
 
 float e = 2.71828;  // Euler's number
 
+//New section, specify set dimensions
+#define obstaclerows 400
+
+
+
+
 // define global variables
 struct color_object_t {
   int32_t x_c;
@@ -241,14 +247,16 @@ static struct image_t *object_detector(struct image_t *img)
   //   VERBOSE_PRINT("\n");
   // }
   //clock_t getObstacles_1 = clock();
+  // VERBOSE_PRINT("Black_Array Length = %d \n", len_pic);
+  // VERBOSE_PRINT("Black_Array Length ACTUAL EXPECT = %d \n", ROW_OBST*COL_OBST);
   getObstacles(black_array, obstacle_array, &process_variables);
   //clock_t getObstacles_2 = clock();
   //VERBOSE_PRINT("!!!!!!!!!!!!!!!!!!!!!!GetObstacles TIME (MILISECONDS) %f \n",(double)(getObstacles_2 - getObstacles_1)*1000 / CLOCKS_PER_SEC);
 
   //NEXT 3 LINES COMENTED OUT BY ALE
-  //for (int i=0 ; i<10; i++){
-  //  VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
-  //}
+  for (int i=0 ; i<10; i++){
+   VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[i*3+0], obstacle_array[i*3+1], obstacle_array[i*3+2]);
+  }
   //VERBOSE_PRINT("OBSTACLES IS %i, %i, %i \n", obstacle_array[0][0], obstacle_array[0][1], obstacle_array[0][2]);
   //clock_t distAndHead_1 = clock();
   n_obst = distAndHead(obstacle_array, output_array, &process_variables);
@@ -356,17 +364,18 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
   // int height_pic = var->height_pic;
   // int width_pic = var->width_pic;
   // int obs_counter         = 0;
-  int obs_1[50][3]        ={0};
+  
+  int obs_1[obstaclerows][3]        ={0};
   int rewriter = 0,rewriter2  = 0;
   int p,pnew,count1,io       =0;
   int minl,maxr,cr        = 0;
 
-  for(int i=0;i<50;i++)
-    {   
-    obs_2[i*3+0]=0  ;
-    obs_2[i*3+1]=0  ;
-    obs_2[i*3+2]=0  ;
-    }  
+  // for(int i=0;i<obstaclerows;i++)
+  //   {   
+  //   obs_1[i][0]=0  ;
+  //   obs_1[i][1]=0  ;
+  //   obs_1[i][2]=0  ;
+  //   }  
  
   for (int i=0; i<nsectcol;i++)
   { 
@@ -378,7 +387,8 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
 
           obs_1[count1][1]=j+1;
           obs_1[count1][0]=i;
-          count1 +=1;   
+          count1 +=1; 
+          VERBOSE_PRINT("COUNT_1 = %i \n", count1);  
         } 
         if (p - pnew == 1 && j<nsectrow-1 && obs_1[count1-1][1]<=j+1 && obs_1[count1-1][1]!=0){
           obs_1[count1-1][2]=j+1; 
@@ -396,7 +406,7 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
   //   }  
 
 
-  for(int i=0;i<50;i++)
+  for(int i=0;i<obstaclerows;i++)
   {
   
       if (obs_1[i][0]==0 || obs_1[i][1]==0 || obs_1[i][2]==0){
@@ -412,20 +422,21 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
         obs_1[i][1]=0;
         obs_1[i][2]=0;
         rewriter +=1;
+        VERBOSE_PRINT("Rewriter = %i \n", rewriter);
       }
   } 
 
   rewriter = 0;  
-  for(int i=0;i<49;i++)
+  for(int i=0;i<(obstaclerows-1);i++)
   {            
       if(obs_1[i][0]!=0)
       {   
           
-          for(int j=i+1;j<49;j++)
+          for(int j=i+1;j<(obstaclerows-1);j++)
           {
-              if(obs_1[j][0]>obs_1[i][0])
-              {
-                  if (obs_1[j][1] >= obs_1[i][1]  && obs_1[j][1] <= obs_1[i][2]){
+              // if(obs_1[j][0]>obs_1[i][0])
+              // {
+                  if (obs_1[j][1] >= obs_1[i][1]  && obs_1[j][1] <= obs_1[i][2]){ 
                       if(obs_1[j][2] > obs_1[i][2]){
                         maxr = obs_1[j][2];
                         minl = obs_1[i][1];
@@ -448,7 +459,7 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
                       cr = obs_1[j][0];   
                   }
                              
-              }  
+              // }  
 
           }
           // printf("O U T P U T i %i, cr %i, minl %i, maxr %i \n\n",i,cr,minl,maxr);
@@ -516,51 +527,9 @@ void getObstacles(uint8_t *black_array, uint16_t *obs_2, struct process_variable
                     cr=0;
                     minl=0;
                     maxr=0; 
-                    
-
-                  // }
-                  // else{
-                  //   printf("the cool new else");
-                  // int currmin = obs_2[1];
-                  // int currmax = obs_2[2];
-                  // for (io=0; io<rewriter2; io++){
-                  //   if (obs_2[io*3+1]<currmin){
-                  //     currmin = obs_2[io*3+1];
-                  //   }
-                  //   if (obs_2[io*3+2]>currmax){
-                  //     currmax = obs_2[io*3+2];
-                  //   }
-                  // }
-                  // if (currmax < minl){
-                  //   obs_2[(rewriter2)*3+0]=cr;
-                  //   obs_2[(rewriter2)*3+1]=minl;
-                  //   obs_2[(rewriter2)*3+2]=maxr;
-                  //   rewriter2 +=1;
-                  //   cr=0;
-                  //   minl=0;
-                  //   maxr=0; 
-                  //   printf("i should add a new pole Right ");
-
-                  // }
-                  // if (currmin > maxr){
-                  //   obs_2[(rewriter2)*3+0]=cr;
-                  //   obs_2[(rewriter2)*3+1]=minl;
-                  //   obs_2[(rewriter2)*3+2]=maxr;
-                  //   rewriter2 +=1;
-                  //   cr=0;
-                  //   minl=0;
-                  //   maxr=0; 
-                  //   printf("i should add a new pole LEft ");
-
-
-                  // }
-                  // currmin = 0;
-                  // currmax =0;
-
-                  // }            
-              
+                
                      
-              }
+                  }
       }
     //  rewriter2 = 1; 
   }
