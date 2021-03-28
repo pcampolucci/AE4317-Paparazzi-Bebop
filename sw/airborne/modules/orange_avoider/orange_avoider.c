@@ -222,7 +222,6 @@ bool updateTrajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_tra
   }
   t_trajectory = clock() - t_trajectory; 
   double time_taken_trajectory = 1000 * ((double)t_trajectory)/CLOCKS_PER_SEC; // in milliseconds 
-  //free(new_inner);
   VERBOSE_PRINT("Time Taken for Trajectory Optimization : %f ms\n", time_taken_trajectory);
   return true;
 }
@@ -258,9 +257,12 @@ void moveWaypoint(uint8_t waypoint, struct EnuCoor_i *new_coor)
  */
 void buildOuterTrajectory(void) {
 
+  double start_x = GetPosX();
+  double start_y = GetPosY();
+
   // set outer trajectory points
-  double rx_list[5] = {0, 2, 2};
-  double ry_list[5] = {0, 2, -2};
+  double rx_list[5] = {start_x, 2, 2};
+  double ry_list[5] = {start_y, 2, -2};
 
   VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
 
