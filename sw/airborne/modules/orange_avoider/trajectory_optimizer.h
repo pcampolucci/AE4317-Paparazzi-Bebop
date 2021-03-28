@@ -27,7 +27,7 @@ extern void calc_potential_field(double gx, double gy, double *ox, double *oy, d
 extern double calc_attractive_potential(double x, double y, double gx, double gy);
 extern double calc_repulsive_potential(double x, double y, double *ox, double *oy, double rr);
 extern void get_motion_model(void);
-extern double oscillations_detection(double previous_ids, double ix, double iy);
+//extern double oscillations_detection(double previous_ids, double ix, double iy);
 
 // helpers declarations
 extern int MaxArray(double *array, int n);

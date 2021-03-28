@@ -300,14 +300,14 @@ void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie){
  */
 uint8_t getObstacles(uint8_t *black_array, uint16_t *obs_2){
   // Declare local variables
-  int nsectrow = AMOUNT_OF_COLUMNS; 
-  int nsectcol = AMOUNT_OF_ROWS;
+  // int nsectrow = AMOUNT_OF_COLUMNS; 
+  // int nsectcol = AMOUNT_OF_ROWS;
   
   int obs_1[obstaclerows][3]  ={0};
   int obstacle_line[AMOUNT_OF_COLUMNS]; 
-  int rewriter = 0,rewriter2  = 0;
-  int p=0, pnew=0, count1=0, io=0;
-  int minl=0, maxr=0, cr=0;
+  // int rewriter = 0,rewriter2  = 0;
+  int p=0, pnew=0, count1=0; //, io=0;
+  // int minl=0, maxr=0, cr=0;
   int black_counter_row = 0;
 
   // Find all white to black/ black to white steps in the line
@@ -456,21 +456,21 @@ double distCalc(int nsectors){
     double dist = 0; 
     double pitch = stateGetNedToBodyEulers_f()->theta; 
     double pitch_pix = (pitch/((FOV_VERTICAL)/57.2958))*SECTOR_HEIGHT*AMOUNT_OF_ROWS;
-    double p00 =  -4.045e+05;
-    double p10 = 156.6;
-    double p01 = 2.232e+06;
-    double p20 = -0.03603;
-    double p11 = -574.2;
-    double p02 = -4.105e+06;
-    double p21 = 0.06744;
-    double p12 = 526.3 ;
-    double p03 = 2.517e+06;
-    double x = 0;
-    double y = 0;
+    // double p00 =  -4.045e+05;
+    // double p10 = 156.6;
+    // double p01 = 2.232e+06;
+    // double p20 = -0.03603;
+    // double p11 = -574.2;
+    // double p02 = -4.105e+06;
+    // double p21 = 0.06744;
+    // double p12 = 526.3 ;
+    // double p03 = 2.517e+06;
+    // double x;
+    // double y;
     npixels = npixels + round(pitch_pix);
     npix_dist_global = npixels; 
-    x = npixels;
-    y = altitude;
+    // x = npixels;
+    // y = altitude;
 
     if (npixels <= 1){
         dist = 0;

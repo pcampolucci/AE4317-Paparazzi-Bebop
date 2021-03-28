@@ -19,6 +19,7 @@
 // Local constants
 #define OUTER_TRAJECTORY_LENGTH 3
 #define INNER_TRAJECTORY_LENGTH 5
+#define INNER_TRAJECTORY_SPACE 25
 #define MAX_OBSTACLES_IN_MAP 20
 #define MAX_OBSTACLES_IN_MSG 5
 
@@ -63,7 +64,7 @@ struct PotentialMap {
 
 // trajectory list
 struct TrajectoryList {
-  struct EnuCoor_i *inner_trajectory;
+  struct EnuCoor_i inner_trajectory[INNER_TRAJECTORY_SPACE];
   uint8_t size;
 };
 

@@ -53,15 +53,15 @@
       !(nav_block >= IndexOfBlock('land here')) &&
       (autopilot_in_flight() == true) )" deroute="Standby"/-->
     <!-- Datalink lost (constant RPM descent) -->
-    <!-- <exception cond="((datalink_time > 5) &&
+    <exception cond="((datalink_time > 5) &&
       !(IndexOfBlock('Holding point') > nav_block) &&
       !(nav_block >= IndexOfBlock('land here')) &&
-      (autopilot_in_flight() == true) )" deroute="land here"/> -->
+      (autopilot_in_flight() == true) )" deroute="land here"/>
     <!-- Geofencing XY -->
-    <!-- <exception cond="(!InsideCyberZoo(GetPosX(), GetPosY()) &&
+    <exception cond="(!InsideCyberZoo(GetPosX(), GetPosY()) &&
       !(IndexOfBlock('Holding point') > nav_block) &&
       !(nav_block >= IndexOfBlock('land here')) &&
-      (autopilot_in_flight() == true) )" deroute="land here"/> -->
+      (autopilot_in_flight() == true) )" deroute="land here"/>
     <!-- Geofencing Z 3.5 -->
     <exception cond="((GetPosAlt() > 3.5) &&
       !(IndexOfBlock('Holding point') > nav_block) &&

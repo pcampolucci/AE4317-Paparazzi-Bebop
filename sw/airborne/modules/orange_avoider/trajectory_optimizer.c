@@ -17,12 +17,12 @@
 #define ORANGE_AVOIDER_VERBOSE TRUE
 
 // Local constants
-#define KP 5
-#define ETA 100
-#define AREA_WIDTH 27
-#define OSCILLATION_DETECTION_LENGTH 6
-#define GRID_SIZE 0.5
-#define DRONE_RADIUS 0.3
+#define KP 5                              // attractive potential gain
+#define ETA 150                           // repulsive potential gain
+#define AREA_WIDTH 27                     // potential area width
+#define OSCILLATION_DETECTION_LENGTH 6    // the number of previous positions used to check oscillations
+#define GRID_SIZE 0.5                     // size of the motion grid
+#define DRONE_RADIUS 0.6                  // circular space occupied by the drone in motion
 
 #ifdef INFINITY
 /* INFINITY is supported */
@@ -295,22 +295,20 @@ void get_motion_model() {
 /*
  * Oscillation detection
  */
-double oscillations_detection(double previous_ids, double ix, double iy) {
-  // previous_ids.append((ix, iy))
-
-  // if (len(previous_ids) > OSCILLATIONS_DETECTION_LENGTH):
-  //     previous_ids.popleft()
-
-  // // check if contains any duplicates by copying into a set
-  // previous_ids_set = set()
-  // for index in previous_ids:
-  //     if index in previous_ids_set:
-  //         return 1
-  //     else:
-  //         previous_ids_set.add(index)
-  // return 0
-  return 0;
-}
+// double oscillations_detection(double previous_ids, double ix, double iy) {
+//   previous_ids.append((ix, iy))
+//   if (len(previous_ids) > OSCILLATIONS_DETECTION_LENGTH):
+//       previous_ids.popleft()
+//   // check if contains any duplicates by copying into a set
+//   previous_ids_set = set()
+//   for index in previous_ids:
+//       if index in previous_ids_set:
+//           return 1
+//       else:
+//           previous_ids_set.add(index)
+//   return 0
+//   return 0;
+// }
 
 /*
  * Helper 1: estimate max value in the array

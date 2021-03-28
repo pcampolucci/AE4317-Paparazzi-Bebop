@@ -55,7 +55,7 @@ uint8_t outer_index = 0;                       // index of the outer waypoint th
 uint8_t inner_index = 0;                       // index of the inner waypoint the drone is moving towards
 uint8_t subtraj_index = 0;                     // index of the subtrajectory the drone is using to fly
 bool trajectory_updated = false;               // checks if it is safe to use the incoming trajectory
-uint8_t n_obstacles = 0;        // indicates the number of obstacles currently present in the map   
+uint8_t n_obstacles = 0;                       // indicates the number of obstacles currently present in the map   
 bool obstacle_map_updated = false;             // checks if there is a new obstacle and then the trajectory should be updated   
 
 // build variables for trajectories
@@ -116,7 +116,6 @@ void orange_avoider_init(void)
 {
 
   for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++) {
-    full_trajectory[i].inner_trajectory = malloc(sizeof(struct EnuCoor_i) * INNER_TRAJECTORY_LENGTH);
     full_trajectory[i].size = INNER_TRAJECTORY_LENGTH;
   }
 
@@ -203,19 +202,29 @@ void orange_avoider_periodic(void)
 }
 
 /*
- * Increases the NAV heading. Assumes heading is an INT32_ANGLE. It is bound in this function.
+ * Takes the inner trajectory and overrides a new one in the allocated slots, placing the rest to zero
  */
 bool updateTrajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *size) {
   clock_t t_trajectory; 
   t_trajectory = clock();
   struct EnuCoor_i *new_inner = optimize_trajectory(obstacle_map, start_trajectory, size, n_obstacles);
-  full_trajectory[subtraj_index].inner_trajectory = realloc(full_trajectory[subtraj_index].inner_trajectory, sizeof(struct EnuCoor_i) * *size);
-  full_trajectory[subtraj_index].inner_trajectory = new_inner;
+
+  // override old trajectory with new one and zeroes if not getting all the space
+  for (int i=0; i < INNER_TRAJECTORY_SPACE; i++){
+    if (i < *size) {
+      //VERBOSE_PRINT("new inner %d is %f/%f\n", i, POS_FLOAT_OF_BFP(new_inner[i].x), POS_FLOAT_OF_BFP(new_inner[i].y));
+      full_trajectory[subtraj_index].inner_trajectory[i].x = new_inner[i].x;
+      full_trajectory[subtraj_index].inner_trajectory[i].y = new_inner[i].y;
+    } else {
+      full_trajectory[subtraj_index].inner_trajectory[i].x = 0;
+      full_trajectory[subtraj_index].inner_trajectory[i].y = 0;
+    }
+  }
   t_trajectory = clock() - t_trajectory; 
   double time_taken_trajectory = 1000 * ((double)t_trajectory)/CLOCKS_PER_SEC; // in milliseconds 
+  //free(new_inner);
   VERBOSE_PRINT("Time Taken for Trajectory Optimization : %f ms\n", time_taken_trajectory);
   return true;
-  free(new_inner);
 }
 
 /*
