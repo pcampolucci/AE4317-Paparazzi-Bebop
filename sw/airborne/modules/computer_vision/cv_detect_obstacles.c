@@ -53,6 +53,7 @@
 #define SIZE_BLACK_ARRAY 4992  // size is 48x104 = 4992
 #define SIZE_OBST_ARRAY 30  // size is 10x3 = 30
 #define SIZE_OUTPUT_ARRAY 30  // size is the same as obst array
+#define SIZE_OUTPUT_ARRAY_REAL 12 //3*4=12, 3 = entries per obstacle, 4 = max number of obstacles
 
 #define FOV_HORIZONTAL 1.850049 // [rad], equivalent to 106 degrees
 #define FOV_VERTICAL 0.912849  // [rad] equivalent to 52.3024 degrees 
@@ -122,7 +123,7 @@ uint8_t masked_frame_f[SIZE_MASK_ARRAY];
 uint8_t black_array[SIZE_BLACK_ARRAY];
 uint16_t obstacle_array[SIZE_OBST_ARRAY]; 
 float output_array[SIZE_OUTPUT_ARRAY];
-//float output_array_real[ROW_OUT*ROW_OUT];
+float output_array_real[SIZE_OUTPUT_ARRAY_REAL];
 
 
 // Function declaration
@@ -191,6 +192,7 @@ static struct image_t *object_detector(struct image_t *img)
   cr_max = cod_cr_max;
   draw = cod_draw;
   uint8_t n_obst = 0; 
+  int n_obstReal = 0;
 
   // Make sure the arrays are clean
   memset(masked_frame_f, 0, SIZE_MASK_ARRAY*sizeof(uint8_t));
@@ -220,15 +222,15 @@ static struct image_t *object_detector(struct image_t *img)
   //    VERBOSE_PRINT("FINAL OUTPUT %i with value : %f, %f, %f \n",i, output_array[i*3],output_array[i*3 +1],output_array[i*3+2]);
   // }
 
-  // n_obstReal = getRealValues(output_array_real,&process_variables);
+  n_obstReal = getRealValues(output_array_real);
   
 
-  // //ALE DATA ANALYSIS
-  // if (n_obstReal == 1)
-  // {
-  //   VERBOSE_PRINT("OBSTACLE DETECTOR OUTPUT %i, %i, %i, %i, %i, %i \n", obstacle_array[0], obstacle_array[1], obstacle_array[2], obstacle_array[3], obstacle_array[4], obstacle_array[5]);
-  //   VERBOSE_PRINT("COMPARISON %f, %f, %i, %i, %i, %f, %f, %f, %f \n", process_variables.altitude, process_variables.pitch, npix_dist_global, npix_headl_global, npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2], output_array[0]);
-  // }
+  //ALE DATA ANALYSIS
+  if (n_obstReal == 1){
+    //VERBOSE_PRINT("OBSTACLE DETECTOR OUTPUT %i, %i, %i, %i, %i, %i \n", obstacle_array[0], obstacle_array[1], obstacle_array[2], obstacle_array[3], obstacle_array[4], obstacle_array[5]);
+    //VERBOSE_PRINT("COMPARISON %f, %f, %i, %i, %i, %f, %f, %f, %f \n", process_variables.altitude, process_variables.pitch, npix_dist_global, npix_headl_global, npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2], output_array[0]);
+    VERBOSE_PRINT("COMPARISON %i,%f,%f,%i,%i,%i,%f,%f,%f \n",n_obst, GetPosAlt(), stateGetNedToBodyEulers_f()->theta, npix_dist_global,npix_headl_global,npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2]);
+  }
   // //{0, 20, 30, 2, 15, 20}
   
   // // update the obstacle message 
@@ -467,7 +469,7 @@ double distCalc(int nsectors){
     // double p03 = 2.517e+06;
     // double x;
     // double y;
-    npixels = npixels + round(pitch_pix);
+    //npixels = npixels + round(pitch_pix); //ALE REMOVED, no pitch correction
     npix_dist_global = npixels; 
     // x = npixels;
     // y = altitude;
@@ -520,70 +522,51 @@ void distAndHead(uint8_t n_obstacles, uint16_t *obstacle_array, float *input_arr
 } 
 
 
-// int getRealValues(float *array, struct process_variables_t *var){ //Ale Changed
-//   // Get the coordinates
-//   //float pole_array_tot[N_OBST*2] = {-0.05, -1.9, 3.6, -0.15, 0.4, 0.3, -3.3, 0.2};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
-//   float pole_array_tot[N_OBST*2] = {-1.8, -3.4, -1.8, 0.5, 1.5, -2.5, 2.8, 2.5};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
-//   //float pole_array_tot[N_OBST*2] = {-1.8, 0.5};
-//   float poles_in_view[N_OBST*2]; 
-//   float drone_posx = GetPosX();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->y
-//   float drone_posy = GetPosY();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->x
-//   float drone_posz = GetPosAlt(); 
-//   float drone_yaw = stateGetNedToBodyEulers_f()->psi; 
-//   float heading_old = 0; 
-//   float heading_sign = 0;
-//   float heading = 0;
-//   float FOV_hor = var->FOV_horizontal; 
-//   int count = 0; //changed to int
-//   float width_pole = 0.2; 
-//   float distance = 0; 
-//   float angle = 0;
+int getRealValues(float *array){ 
+  // Get the coordinates
+  //float pole_array_tot[N_OBST*2] = {-0.05, -1.9, 3.6, -0.15, 0.4, 0.3, -3.3, 0.2};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
+  float pole_array_tot[N_OBST*2] = {-1.8, -3.4, -1.8, 0.5, 1.5, -2.5, 2.8, 2.5};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
 
-//   float ax = 0;
-//   float ay = 0;
-//   float bx = 0;
-//   float by = 0;
+  float drone_posx = GetPosX();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->y
+  float drone_posy = GetPosY();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->x
+  //float drone_posz = GetPosAlt(); 
+  float drone_yaw = stateGetNedToBodyEulers_f()->psi; 
+
+  float FOV_hor = FOV_HORIZONTAL; 
+  int count = 0; //changed to int
+  float width_pole = 0.2; 
+  float distance = 0; 
+  float heading = 0;
+
+  float ax = 0;
+  float ay = 0;
+  float bx = 0;
+  float by = 0;
   
-//   // Get the poles in view
-//   for (int i=0; i<N_OBST*2; i=i+2){
-//     //Replaced heading function
-//     //                pole_x             drone_x      pole_y              drone_y           yaw
-//     heading_sign  = atan((pole_array_tot[i]-drone_posx)/(pole_array_tot[i+1]-drone_posy)) + (- drone_yaw); //this is used to calcuated sign of the angle (heading2/fabs(heading2)) gives 1 or -1
-//     distance = sqrt(pow((drone_posx-pole_array_tot[i]),2) + pow((drone_posy-pole_array_tot[i+1]),2));  // Real Distance
-//     //VERBOSE_PRINT("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII is equal TOOOOOOOO %i", i);
-//     //Formula for angle between two vectors
-//     //nominator = (distance*sin(drone_yaw)-drone_posx)*(pole_array_tot[i]-drone_posx)+(distance*cos(drone_yaw)-drone_posy)*(pole_array_tot[i+1]-drone_posy)
-//     //denominator = sqrt(pow((distance*sin(drone_yaw)-drone_posx),2)+pow((distance*cos(drone_yaw)-drone_posy),2))*sqrt(pow((pole_array_tot[i]-drone_posx),2)+pow((pole_array_tot[i+1]-drone_posy),2))
-//     heading_old = acos(((distance*sin(drone_yaw)-drone_posx)*(pole_array_tot[i]-drone_posx)+(distance*cos(drone_yaw)-drone_posy)*(pole_array_tot[i+1]-drone_posy))/(sqrt(pow((distance*sin(drone_yaw)-drone_posx),2)+pow((distance*cos(drone_yaw)-drone_posy),2))*sqrt(pow((pole_array_tot[i]-drone_posx),2)+pow((pole_array_tot[i+1]-drone_posy),2))));
-//     //         ^ this bracket stuff gives negative if to the left of the drone
-//     ax = (distance*sin(drone_yaw)-drone_posx);
-//     by = (pole_array_tot[i+1]-drone_posy);
-//     ay =(distance*cos(drone_yaw)-drone_posy);
-//     bx = (pole_array_tot[i]-drone_posx);
-//     angle = -atan2( ax*by - ay*bx, ax*bx + ay*by );
-    
-//     if (heading<(pi/2)){
-//       heading = heading_old*(heading_sign/fabs(heading_sign));
-//     }
-//     else{
-//       heading = -heading_old*(heading_sign/fabs(heading_sign));
-//     }
+  // Get the poles in view
+  for (int i=0; i<N_OBST*2; i=i+2){
+    //calculate the distance of pole
+    distance = sqrt(pow((drone_posx-pole_array_tot[i]),2) + pow((drone_posy-pole_array_tot[i+1]),2));  // Real Distance
 
-//     //VERBOSE_PRINT("HEADING NEW %i, %f \n", i, (angle*180/pi));
-//     //VERBOSE_PRINT("HEADING %i, %f \n",i, (heading*180/pi));
-//     //VERBOSE_PRINT("IF STATEMENT %i, %f \n", (i+1), (fabs(heading)+atan((width_pole/2)/distance)));
-//     if (fabs(angle)+atan((width_pole/2)/distance) < FOV_hor/2){
-//       poles_in_view[count] = pole_array_tot[i];
-//       poles_in_view[count] = pole_array_tot[i+1];
-//       array[count] = distance;                                   // Real Distance
-//       array[count+1] = angle - atan((width_pole/2)/distance);  // Real Heading left
-//       array[count+2] = angle + atan((width_pole/2)/distance);  // Real Heading right
-//       count = count + 3; 
-//       //VERBOSE_PRINT("WE ARE INNNNNNNNNNNNNNNNNNNN \n");
-//     }
-//   }
-//   return (count/3); //removed /3
-// }
+    //Calculate heading of pole (formula for angle between two vectors)
+    //nominator = (distance*sin(drone_yaw)-drone_posx)*(pole_array_tot[i]-drone_posx)+(distance*cos(drone_yaw)-drone_posy)*(pole_array_tot[i+1]-drone_posy)
+    //denominator = sqrt(pow((distance*sin(drone_yaw)-drone_posx),2)+pow((distance*cos(drone_yaw)-drone_posy),2))*sqrt(pow((pole_array_tot[i]-drone_posx),2)+pow((pole_array_tot[i+1]-drone_posy),2))
+    ax = (distance*sin(drone_yaw)-drone_posx);
+    by = (pole_array_tot[i+1]-drone_posy);
+    ay =(distance*cos(drone_yaw)-drone_posy);
+    bx = (pole_array_tot[i]-drone_posx);
+    heading = -atan2( ax*by - ay*bx, ax*bx + ay*by );
+    
+    //if in the field of view, add to array
+    if (fabs(heading)+atan((width_pole/2)/distance) < FOV_hor/2){
+      array[count] = distance;                                   // Real Distance
+      array[count+1] = heading - atan((width_pole/2)/distance);  // Real Heading left
+      array[count+2] = heading + atan((width_pole/2)/distance);  // Real Heading right
+      count = count + 3; 
+    }
+  }
+  return (count/3); 
+}
 
 
 /*
