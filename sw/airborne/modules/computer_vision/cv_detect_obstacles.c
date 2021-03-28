@@ -226,10 +226,10 @@ static struct image_t *object_detector(struct image_t *img)
   
 
   //ALE DATA ANALYSIS
-  if (n_obstReal == 1){
+  if (n_obstReal == 1 && n_obst == 1){
     //VERBOSE_PRINT("OBSTACLE DETECTOR OUTPUT %i, %i, %i, %i, %i, %i \n", obstacle_array[0], obstacle_array[1], obstacle_array[2], obstacle_array[3], obstacle_array[4], obstacle_array[5]);
     //VERBOSE_PRINT("COMPARISON %f, %f, %i, %i, %i, %f, %f, %f, %f \n", process_variables.altitude, process_variables.pitch, npix_dist_global, npix_headl_global, npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2], output_array[0]);
-    VERBOSE_PRINT("COMPARISON %i,%f,%f,%i,%i,%i,%f,%f,%f \n",n_obst, GetPosAlt(), stateGetNedToBodyEulers_f()->theta, npix_dist_global,npix_headl_global,npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2]);
+    VERBOSE_PRINT("COMPARISON %f,%f,%i,%i,%i,%f,%f,%f \n", GetPosAlt(), stateGetNedToBodyEulers_f()->theta, npix_dist_global,npix_headl_global,npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2]);
   }
   // //{0, 20, 30, 2, 15, 20}
   
