@@ -56,7 +56,8 @@ uint8_t inner_index = 0;                       // index of the inner waypoint th
 uint8_t subtraj_index = 0;                     // index of the subtrajectory the drone is using to fly
 bool trajectory_updated = false;               // checks if it is safe to use the incoming trajectory
 uint8_t n_obstacles = 0;                       // indicates the number of obstacles currently present in the map   
-bool obstacle_map_updated = false;             // checks if there is a new obstacle and then the trajectory should be updated   
+bool obstacle_map_updated = false;             // checks if there is a new obstacle and then the trajectory should be updated  
+bool initialized = false;                      // one time command for the trajectory setup 
 
 // build variables for trajectories
 struct EnuCoor_i outer_trajectory[OUTER_TRAJECTORY_LENGTH];
@@ -115,18 +116,9 @@ static void color_detection_cb(uint8_t __attribute__((unused)) sender_id, struct
 void orange_avoider_init(void)
 {
 
-  for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++) {
-    full_trajectory[i].size = INNER_TRAJECTORY_LENGTH;
-  }
-
-  // Build outer trajectory based on few sparse waypoints
-  buildOuterTrajectory();
-
-  // For each space between outer waypoints build an editable pointwise inner trajectory
-  for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++)
-  {
-    buildInnerTrajectory(i);
-  }
+  // obstacle_map[0].loc.x = POS_BFP_OF_REAL(1.5);
+  // obstacle_map[0].loc.y = POS_BFP_OF_REAL(1.5);
+  // n_obstacles += 1;
 
   // bind our colorfilter callbacks to receive the color filter outputs
   AbiBindMsgOBSTACLE_DETECTION(ORANGE_AVOIDER_VISUAL_DETECTION_ID, &color_detection_ev, color_detection_cb);
@@ -144,6 +136,24 @@ void orange_avoider_periodic(void)
   // only evaluate our state machine if we are flying
   if(!autopilot_in_flight()){
     return;
+  }
+
+  if(!initialized){
+
+    for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++) {
+      full_trajectory[i].size = INNER_TRAJECTORY_LENGTH;
+    }
+
+    // Build outer trajectory based on few sparse waypoints
+    buildOuterTrajectory();
+
+    // For each space between outer waypoints build an editable pointwise inner trajectory
+    for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++)
+    {
+      buildInnerTrajectory(i);
+    }
+
+    initialized = true;
   }
 
   // Check how close we are from the targets
@@ -257,14 +267,15 @@ void moveWaypoint(uint8_t waypoint, struct EnuCoor_i *new_coor)
  */
 void buildOuterTrajectory(void) {
 
+  VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
+
   double start_x = GetPosX();
   double start_y = GetPosY();
+  VERBOSE_PRINT("[OUTER TRAJECTORY] Starting position (%f/%f)\n", start_x, start_y);
 
   // set outer trajectory points
   double rx_list[5] = {start_x, 2, 2};
   double ry_list[5] = {start_y, 2, -2};
-
-  VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
 
   // populate outer_tajectory struct
   for (int i = 0; i < OUTER_TRAJECTORY_LENGTH; i++) {

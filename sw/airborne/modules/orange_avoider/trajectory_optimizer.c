@@ -19,7 +19,7 @@
 // Local constants
 #define KP 5                              // attractive potential gain
 #define ETA 100                           // repulsive potential gain
-#define AREA_WIDTH 27                     // potential area width
+#define AREA_WIDTH 30                     // potential area width
 #define OSCILLATION_DETECTION_LENGTH 6    // the number of previous positions used to check oscillations
 #define GRID_SIZE 0.5                     // size of the motion grid
 #define DRONE_RADIUS 0.3                  // circular space occupied by the drone in motion
