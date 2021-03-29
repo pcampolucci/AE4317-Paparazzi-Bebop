@@ -128,8 +128,10 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
   // construct solution Trajectory used to update the pointer
   // build two arrays of new solution coordinates
   size_t trajectory_size = 1;
-  double *rx = malloc(sizeof(double*) * trajectory_size);
-  double *ry = malloc(sizeof(double*) * trajectory_size);
+  double rx[10];
+  double ry[10];
+  // double *rx = malloc(sizeof(double*) * trajectory_size);
+  // double *ry = malloc(sizeof(double*) * trajectory_size);
 
   rx[0] = sx;
   ry[0] = sy;
@@ -171,9 +173,11 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
     d = hypot(gx - xp, gy - yp);
 
     // now we can expand the solution space and add a new point
-    trajectory_size += 1;
-    rx = realloc(rx, sizeof(double) * trajectory_size);
-    ry = realloc(ry, sizeof(double) * trajectory_size);
+    if(trajectory_size < 10) {
+      trajectory_size += 1;
+    }
+    // rx = realloc(rx, sizeof(double) * trajectory_size);
+    // ry = realloc(ry, sizeof(double) * trajectory_size);
     rx[trajectory_size-1] = xp;
     ry[trajectory_size-1] = yp;
     // VERBOSE_PRINT("Found (%f/%f) as new optimal point at index %d\n", rx[trajectory_size-1], ry[trajectory_size-1], trajectory_size);
@@ -188,8 +192,8 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
   resulting_trajectory.y = ry;
   resulting_trajectory.size = trajectory_size;
 
-  free(rx);
-  free(ry);
+  // free(rx);
+  // free(ry);
 
 }
 
