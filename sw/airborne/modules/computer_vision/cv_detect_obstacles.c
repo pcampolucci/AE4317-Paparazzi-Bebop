@@ -457,7 +457,7 @@ double distCalc(int nsectors){
     int npixels = (AMOUNT_OF_ROWS - 1 - nsectors)*SECTOR_HEIGHT;
     double dist = 0; 
     double pitch = stateGetNedToBodyEulers_f()->theta; 
-    double pitch_pix = (pitch/((FOV_VERTICAL)/57.2958))*SECTOR_HEIGHT*AMOUNT_OF_ROWS;
+    double pitch_pix = (pitch/((FOV_VERTICAL)))*SECTOR_HEIGHT*AMOUNT_OF_ROWS;
     // double p00 =  -4.045e+05;
     // double p10 = 156.6;
     // double p01 = 2.232e+06;
@@ -469,7 +469,7 @@ double distCalc(int nsectors){
     // double p03 = 2.517e+06;
     // double x;
     // double y;
-    //npixels = npixels + round(pitch_pix); //ALE REMOVED, no pitch correction
+    npixels = npixels + round(pitch_pix); //ALE REMOVED, no pitch correction
     npix_dist_global = npixels; 
     // x = npixels;
     // y = altitude;
@@ -488,7 +488,7 @@ double distCalc(int nsectors){
     }
     if (dist > 10){
         dist = 0; 
-        VERBOSE_PRINT("DIST IS LARGER THAN 10");
+       // VERBOSE_PRINT("DIST IS LARGER THAN 10");
     }
     return dist; 
 }
