@@ -12,12 +12,12 @@
     
 
        <!-- Detect green -->
-      <define name="OBSTACLE_DETECTOR_LUM_MIN" value="60"/>
-      <define name="OBSTACLE_DETECTOR_LUM_MAX" value="130"/>
-      <define name="OBSTACLE_DETECTOR_CB_MIN" value="75"/>
-      <define name="OBSTACLE_DETECTOR_CB_MAX" value="110"/>
-      <define name="OBSTACLE_DETECTOR_CR_MIN" value="120"/>
-      <define name="OBSTACLE_DETECTOR_CR_MAX" value="140"/> 
+      <define name="OBSTACLE_DETECTOR_LUM_MIN" value="76"/>
+      <define name="OBSTACLE_DETECTOR_LUM_MAX" value="235"/>
+      <define name="OBSTACLE_DETECTOR_CB_MIN" value="0"/>
+      <define name="OBSTACLE_DETECTOR_CB_MAX" value="114"/>
+      <define name="OBSTACLE_DETECTOR_CR_MIN" value="0"/>
+      <define name="OBSTACLE_DETECTOR_CR_MAX" value="156"/> 
 
     </target>
     <target name="nps" board="pc">
