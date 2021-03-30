@@ -63,6 +63,11 @@ struct PotentialMap {
   double miny;
 };
 
+struct OptimizedTrajectory {
+  int size; 
+  struct EnuCoor_i buf[MAX_OPTIMIZER_SIZE];
+};
+
 // trajectory list
 struct TrajectoryList {
   struct EnuCoor_i inner_trajectory[INNER_TRAJECTORY_SPACE];
