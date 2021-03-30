@@ -164,7 +164,7 @@ void orange_avoider_periodic(void)
     obstacle_map_updated = false;
   }
 
-  if (mse_inner < 0.15 && trajectory_updated){
+  if (mse_inner < 0.5 && trajectory_updated){
 
     VERBOSE_PRINT("[INNER TRAJECTORY] Setting new Waypoint at %d, going to : (%f/%f) \n", \
     inner_index, \
@@ -177,7 +177,7 @@ void orange_avoider_periodic(void)
       inner_index += 1;
     }
   
-  } if (mse_outer < 0.15) {
+  } if (mse_outer < 0.5) {
 
     if (outer_index < OUTER_TRAJECTORY_LENGTH-1) {
       outer_index += 1;
