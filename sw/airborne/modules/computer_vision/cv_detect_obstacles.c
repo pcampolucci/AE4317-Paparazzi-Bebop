@@ -200,7 +200,6 @@ static struct image_t *object_detector(struct image_t *img)
   memset(obstacle_array, 0, SIZE_OBST_ARRAY*sizeof(uint16_t));
   memset(output_array, 0, SIZE_OUTPUT_ARRAY*sizeof(float));
   
-  //Filter and find centroid
   //clock_t maskit_1 = clock();
   uint32_t count = mask_it(img, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame_f);
   //clock_t maskit_2 = clock();
@@ -210,12 +209,6 @@ static struct image_t *object_detector(struct image_t *img)
   //clock_t getObstacles_1 = clock();
   n_obst = getObstacles(blackie_array, obstacle_array);
   //clock_t getObstacles_2 = clock();
-  // //clock_t distAndHead_1 = clock();
-  // VERBOSE_PRINT("AMOUNT OF OBSTACLES IS EQUAL TOO %i \n", n_obst);
-  // for (int i = 0; i<n_obst; i++){
-  //    VERBOSE_PRINT("OBSTACLE OUTPUT %i with value : %i, %i, %i \n",i, obstacle_array[i*3],obstacle_array[i*3 +1],obstacle_array[i*3+2]);
-  // }
-  //VERBOSE_PRINT("AMOUNT OF OBSTACLES DETECTED IS %i", n_obst);
   distAndHead(n_obst, obstacle_array, output_array);
 
   // for (int i = 0; i<n_obst; i++){
@@ -275,9 +268,9 @@ void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie){
     float sum_sec_tot = 0; 
     float average = 0; 
     int countie = 0; 
-    //Loops through the cols (so in the rotated pic from up to down)
+    // Loops through the cols (so in the rotated pic from up to down)
     for (int i = 0; i < AMOUNT_OF_COLUMNS; i++){       
-        //loops through the rows (so in the rotated pic from left to right)
+        // Loops through the rows (so in the rotated pic from left to right)
         for (int g = 0; g < AMOUNT_OF_ROWS; g++){
             sum_sec_tot = 0; 
             average = 0;
@@ -294,11 +287,10 @@ void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie){
 
             // Get full sector
             average = sum_sec_tot/(SECTOR_HEIGHT*SECTOR_WIDTH);
-
-            if (average<threshold){
-                blackie[AMOUNT_OF_COLUMNS*(AMOUNT_OF_ROWS-1-g)+i] = 0;
+            if (average<threshold){  // sector is white
+                blackie[AMOUNT_OF_COLUMNS*(AMOUNT_OF_ROWS-1-g)+i] = 0;  
             }
-            else{
+            else{  // sector is black
                 blackie[AMOUNT_OF_COLUMNS*(AMOUNT_OF_ROWS-1-g)+i] = 1;
             }
             countie++; 
@@ -440,7 +432,18 @@ uint8_t getObstacles(uint8_t *black_array, uint16_t *obs_2){
 
 
 /*
- * Function description
+ * Function: headingCalc(int l_sec, int r_sec, float *head_array);
+ * ----------------------------
+ *   Returns void
+ *   
+ *   l_sec: amount of sectors left of the obstacle, started counting from the left
+ *   r_sec: amount of sectors right of the obstacle, started counting from the left 
+ *   head_array: output array where the heading will be written to in radians. 
+ *               0 degrees is the middle of the picture
+ *
+ *
+ *   Purpose: the purpose of this function is to find the heading angles 
+ *            from the amount of pixels left and right of the obstacle 
  */
 void headingCalc(int l_sec, int r_sec, float *head_array){  
     int l_pixels = (l_sec+1)*SECTOR_WIDTH;
@@ -448,7 +451,7 @@ void headingCalc(int l_sec, int r_sec, float *head_array){
     float factor = 0.2023*pi/180;
     float heading_l =0; 
     float heading_r =0; 
-
+    // If statements determine what 
     if (l_pixels < (WIDTH_PIXELS/2)) {
         heading_l = factor * (l_pixels - (WIDTH_PIXELS / 2));
         head_array[0] = heading_l;
@@ -465,7 +468,7 @@ void headingCalc(int l_sec, int r_sec, float *head_array){
         heading_r = factor * (r_pixels - (WIDTH_PIXELS / 2));
         head_array[1] = heading_r;
     }
-    npix_headl_global = l_pixels;
+    npix_headl_global = l_pixels; 
     npix_headr_global = r_pixels;
 }
 
@@ -518,12 +521,12 @@ double distCalc(int nsectors, float heading){
 }
 
 /*
- * Function: distAndHead(uint8_t n_obstacles, uint16_t *obstacle_array, float *input_array);
+ * Function: distAndHead(uint8_t n_obstacles, uint16_t *array_w_obstacles, float *input_array);
  * ----------------------------
  *   Returns void
  *
  *   n_obstacles: number of detected obstacles
- *   obstacle_array: input array with intput data of the format: 
+ *   array_w_obstacles: input array with intput data of the format: 
  *                   {distance_pixels_obstacle1, heading_pixels_left_obstacle1, heading_pixels_right_obstacle1, 
  *                    distance_pixels_obstacle2, heading_pixels_left_obstacle2, heading_pixels_right_obstacle2, ...}
  *   input_array: output array in which the output data will be written, the format is: 

@@ -94,7 +94,7 @@ struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obstacle_map_opt
     }
 
     out_of_bounds = false;
-
+    VERBOSE_PRINT("13\n");
     VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
 
     return optimized_trajectory;
@@ -106,8 +106,9 @@ struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obstacle_map_opt
 
   // once this is done rx and ry should be ready to be sent to the Trajectory
   // first we reallocate once the Trajectory to the new length
-    struct OptimizedTrajectory optimized_trajectory;
-    optimized_trajectory.size = *current_length;
+  struct OptimizedTrajectory optimized_trajectory;
+  optimized_trajectory.size = *current_length;
+
 
   // then we go through the whole new Trajectory to assign the new values
   for (int i = 1; i < resulting_trajectory.size-1; i++) {
@@ -133,11 +134,10 @@ struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obstacle_map_opt
  */
 void potential_field_planning(double sx, double sy, double gx, double gy, double *ox, double *oy, double reso, double rr) {
 
-  //VERBOSE_PRINT("Potential Field Calculation started\n");
+  VERBOSE_PRINT("1\n");
 
   // update old field information 
   calc_potential_field(gx, gy, ox, oy, reso, rr, sx, sy);
-
   // search path
   double d = hypot(sx - gx, sy - gy);
   int ix = round((sx - potential.minx) / reso);
@@ -145,7 +145,7 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
   int minix = 0;
   int miniy = 0;
   double p;
-
+  VERBOSE_PRINT("4\n");
   // construct solution Trajectory used to update the pointer
   // build two arrays of new solution coordinates
   size_t trajectory_size = 1;
@@ -154,13 +154,13 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
 
   rx[0] = sx;
   ry[0] = sy;
-
+  VERBOSE_PRINT("5\n");
   get_motion_model();
 
   while (d >= reso) {
     // VERBOSE_PRINT("3.1\n");
     double minp = INFINITY;
-
+    VERBOSE_PRINT("6\n");
     double motion_len = sizeof(motion) / sizeof(motion[0]);
 
     for (int i = 0; i < motion_len; i++) {
@@ -181,6 +181,7 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
         miniy = iny;
       }
     }
+    VERBOSE_PRINT("6.1\n");
 
     ix = minix;
     iy = miniy;
@@ -188,7 +189,7 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
     double yp = iy * reso + potential.miny;
 
     d = hypot(gx - xp, gy - yp);
-
+    VERBOSE_PRINT("7\n");
     // check if we are going out of bounds
     if(trajectory_size >= MAX_LENGTH_NEW_TRAJECTORY-1) {
       out_of_bounds = true;
@@ -196,7 +197,7 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
     } else {
       trajectory_size += 1;
     }
-
+    VERBOSE_PRINT("8\n");
     // now we can expand the solution space and add a new point
     rx[trajectory_size-1] = xp;
     ry[trajectory_size-1] = yp;
@@ -215,7 +216,6 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
 {
 
   //VERBOSE_PRINT("Calculating Potential Map \n");
-
   int ox_len = 0;
   int oy_len = 0;
   if (sizeof(ox[0]) ==0 || sizeof(oy[0]) ==0){
@@ -226,22 +226,32 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
     ox_len = round(sizeof(ox) / sizeof(ox[0]));
     oy_len = round(sizeof(oy) / sizeof(oy[0]));
   }
-
-
   // get map contour
   potential.minx = Min(Min(MinArray(ox, ox_len), sx), gx) - AREA_WIDTH / 2.0;
   potential.miny = Min(Min(MinArray(oy, oy_len), sy), gy) - AREA_WIDTH / 2.0;
   double maxx = Max(Max(MaxArray(ox, ox_len), sx), gx) + AREA_WIDTH / 2.0;
   double maxy = Max(Max(MaxArray(oy, oy_len), sy), gy) + AREA_WIDTH / 2.0;
-
+  VERBOSE_PRINT("1,2\n");
   // get step resolution in the map
   uint32_t xw = round((maxx - potential.minx) / reso);
   uint32_t yw = round((maxy - potential.miny) / reso);
+
+  if(potential.pmap != 0){
+    for(uint32_t i = 0; i < xw; i++) {
+      free(potential.pmap[i]);
+    }
+    free(potential.pmap);
+  }
 
   // build an array representring the map
   last_size_x = xw;
   last_size_y = yw;
 
+  potential.size_x = xw;
+  potential.size_y = yw;
+
+
+  potential.pmap = pmap;
   potential.size_x = xw;
   potential.size_y = yw;
 

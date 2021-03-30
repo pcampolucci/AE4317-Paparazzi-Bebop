@@ -58,6 +58,7 @@ bool trajectory_updated = false;               // checks if it is safe to use th
 uint8_t n_obstacles = 0;                       // indicates the number of obstacles currently present in the map   
 bool obstacle_map_updated = false;             // checks if there is a new obstacle and then the trajectory should be updated  
 bool initialized = false;                      // one time command for the trajectory setup 
+struct EnuCoor_i *new_inner = 0;
 
 // build variables for trajectories
 struct EnuCoor_i outer_trajectory[OUTER_TRAJECTORY_LENGTH];
@@ -131,7 +132,7 @@ void orange_avoider_init(void)
 void orange_avoider_periodic(void)
 {
 
-  // // only evaluate our state machine if we are flying
+  // only evaluate our state machine if we are flying
   // if(!autopilot_in_flight()){
   //   return;
   // }
