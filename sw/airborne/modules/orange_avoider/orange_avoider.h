@@ -22,6 +22,7 @@
 #define INNER_TRAJECTORY_SPACE 25
 #define MAX_OBSTACLES_IN_MAP 25
 #define MAX_OBSTACLES_IN_MSG 5
+#define MAX_OPTIMIZER_SIZE 20
 
 // Obstacle struct used for optimization and avoidance
 struct Obstacle {
@@ -60,6 +61,11 @@ struct PotentialMap {
   int size_y;
   double minx;
   double miny;
+};
+
+struct OptimizedTrajectory {
+  int size; 
+  struct EnuCoor_i buf[MAX_OPTIMIZER_SIZE];
 };
 
 // trajectory list

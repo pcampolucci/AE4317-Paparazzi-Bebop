@@ -58,6 +58,7 @@ bool trajectory_updated = false;               // checks if it is safe to use th
 uint8_t n_obstacles = 0;                       // indicates the number of obstacles currently present in the map   
 bool obstacle_map_updated = false;             // checks if there is a new obstacle and then the trajectory should be updated  
 bool initialized = false;                      // one time command for the trajectory setup 
+struct EnuCoor_i *new_inner = 0;
 
 // build variables for trajectories
 struct EnuCoor_i outer_trajectory[OUTER_TRAJECTORY_LENGTH];
@@ -131,7 +132,7 @@ void orange_avoider_init(void)
 void orange_avoider_periodic(void)
 {
 
-  // // only evaluate our state machine if we are flying
+  // only evaluate our state machine if we are flying
   // if(!autopilot_in_flight()){
   //   return;
   // }
@@ -212,14 +213,19 @@ void orange_avoider_periodic(void)
 bool updateTrajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *size) {
   clock_t t_trajectory; 
   t_trajectory = clock();
-  struct EnuCoor_i *new_inner = optimize_trajectory(obstacle_map, start_trajectory, size, n_obstacles);
+
+  if(new_inner != 0){
+    free(new_inner);
+  }
+
+  struct OptimizedTrajectory new_inner = optimize_trajectory(obstacle_map, start_trajectory, size, n_obstacles);
 
   // override old trajectory with new one and zeroes if not getting all the space
   for (int i=0; i < INNER_TRAJECTORY_SPACE; i++){
     if (i < *size) {
       //VERBOSE_PRINT("new inner %d is %f/%f\n", i, POS_FLOAT_OF_BFP(new_inner[i].x), POS_FLOAT_OF_BFP(new_inner[i].y));
-      full_trajectory[subtraj_index].inner_trajectory[i].x = new_inner[i].x;
-      full_trajectory[subtraj_index].inner_trajectory[i].y = new_inner[i].y;
+      full_trajectory[subtraj_index].inner_trajectory[i].x = new_inner.buf[i].x;
+      full_trajectory[subtraj_index].inner_trajectory[i].y = new_inner.buf[i].y;
     } else {
       full_trajectory[subtraj_index].inner_trajectory[i].x = 0;
       full_trajectory[subtraj_index].inner_trajectory[i].y = 0;
