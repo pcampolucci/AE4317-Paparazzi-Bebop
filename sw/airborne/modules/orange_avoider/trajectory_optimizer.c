@@ -23,6 +23,7 @@
 #define OSCILLATION_DETECTION_LENGTH 6    // the number of previous positions used to check oscillations
 #define GRID_SIZE 0.5                     // size of the motion grid
 #define DRONE_RADIUS 0.3                  // circular space occupied by the drone in motion
+#define MAX_LENGTH_NEW_TRAJECTORY 3      // maximum accepted length for new computed trajectory
 
 #ifdef INFINITY
 /* INFINITY is supported */
@@ -35,10 +36,11 @@
 #define VERBOSE_PRINT(...)
 #endif
 
-// Initialize objects
+// Initialize objects and variables
 struct DPoint motion[8];                    // motion choices for trajectory
 struct Trajectory resulting_trajectory;     // final optimized trajectory object
-struct PotentialMap potential;
+struct PotentialMap potential;              // potential map used to find the optimal
+bool out_of_bounds = false;                 // check if trajectory length exceeds the limits
 
 /*
  * Do the actual magic
@@ -76,6 +78,28 @@ struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuC
 
   free(ox);
   free(oy);
+
+  // check if we managed to update the trajectory, otherwise we use the old one
+  if(out_of_bounds){
+
+    VERBOSE_PRINT("[OPTIMIZER] Optimisation Failed! Keeping the old trajectory\n");
+
+    struct EnuCoor_i *optimized_trajectory;
+    optimized_trajectory = malloc(sizeof(struct EnuCoor_i) * (*current_length));
+
+    // then we go through the whole new Trajectory to assign the new values
+    for (int i = 0; i < *current_length; i++) {
+      optimized_trajectory[i].x = start_trajectory[i].x;
+      optimized_trajectory[i].y = start_trajectory[i].y;
+    }
+
+    out_of_bounds = false;
+
+    VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
+
+    return optimized_trajectory;
+  }
+  
 
   VERBOSE_PRINT("[OPTIMIZER] Post Computed Trajectory of length: %d\n", resulting_trajectory.size);
   *current_length = resulting_trajectory.size;
@@ -128,16 +152,13 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
   // construct solution Trajectory used to update the pointer
   // build two arrays of new solution coordinates
   size_t trajectory_size = 1;
-  double rx[10];
-  double ry[10];
-  // double *rx = malloc(sizeof(double*) * trajectory_size);
-  // double *ry = malloc(sizeof(double*) * trajectory_size);
+  double rx[MAX_LENGTH_NEW_TRAJECTORY];
+  double ry[MAX_LENGTH_NEW_TRAJECTORY];
 
   rx[0] = sx;
   ry[0] = sy;
 
   get_motion_model();
-  // previous_ids = deque()
 
   while (d >= reso) {
     double minp = INFINITY;
@@ -172,28 +193,25 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
     double yp = iy * reso + potential.miny;
     d = hypot(gx - xp, gy - yp);
 
-    // now we can expand the solution space and add a new point
-    if(trajectory_size < 10) {
+    // check if we are going out of bounds
+    if(trajectory_size >= MAX_LENGTH_NEW_TRAJECTORY-1) {
+      out_of_bounds = true;
+      break;
+    } else {
       trajectory_size += 1;
     }
-    // rx = realloc(rx, sizeof(double) * trajectory_size);
-    // ry = realloc(ry, sizeof(double) * trajectory_size);
+
+    // now we can expand the solution space and add a new point
     rx[trajectory_size-1] = xp;
     ry[trajectory_size-1] = yp;
     // VERBOSE_PRINT("Found (%f/%f) as new optimal point at index %d\n", rx[trajectory_size-1], ry[trajectory_size-1], trajectory_size);
 
-    // if (oscillations_detection(previous_ids, ix, iy)):
-    //     print("Oscillation detected at ({},{})!".format(ix, iy))
-    //     break
   }
 
   // update trajectory message 
   resulting_trajectory.x = rx;
   resulting_trajectory.y = ry;
   resulting_trajectory.size = trajectory_size;
-
-  // free(rx);
-  // free(ry);
 
 }
 

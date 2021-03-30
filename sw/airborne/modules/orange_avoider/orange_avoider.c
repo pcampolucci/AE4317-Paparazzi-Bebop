@@ -129,14 +129,11 @@ void orange_avoider_init(void)
  */
 void orange_avoider_periodic(void)
 {
-  // Starting subtrajectory gets modified based on the presence of msg in the map
-  clock_t t_periodic; 
-  t_periodic = clock();
 
-  // only evaluate our state machine if we are flying
-  if(!autopilot_in_flight()){
-    return;
-  }
+  // // only evaluate our state machine if we are flying
+  // if(!autopilot_in_flight()){
+  //   return;
+  // }
 
   if(!initialized){
 
@@ -205,9 +202,6 @@ void orange_avoider_periodic(void)
 
   NavGotoWaypointHeading(WP_INNER);
 
-  t_periodic = clock() - t_periodic; 
-  double time_taken_trajectory = 1000 * ((double)t_periodic)/CLOCKS_PER_SEC; // in milliseconds 
-  //VERBOSE_PRINT("Time Taken for Periodic : %f ms\n", time_taken_trajectory);
   return;
 }
 
