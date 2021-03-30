@@ -496,10 +496,11 @@ double distCalc(int nsectors, float heading){
     }
     else if (npixels < SECTOR_HEIGHT*HEIGHT_PIXELS){  // only goes in if the amount of pixels is within bounds maximum is entire picture white
       if (fabs(heading) < heading_threshold){  // if the obstacle is in the +- 10 degrees of the FOV
-        dist = altitude/tan((FOV_VERTICAL/2));  // pls modify ale (last term is the shadow zone)
+        //4*pow(10, -6)*pow(npixels,3)-0.0002*pow(npixels,2)+0.0063*npixels+0.9476
+        dist = 4*pow(10, -6)*pow(npixels,3)-0.0002*pow(npixels,2)+0.0063*npixels+0.9476 + altitude/tan((FOV_VERTICAL/2));  // pls modify ale (last term is the shadow zone)
       }
       else if (FOV_HORIZONTAL/2 > fabs(heading) && fabs(heading) > heading_threshold){ // if the obstacle is between +-10 to +-50 degrees 
-        dist = altitude/tan((FOV_VERTICAL/2));  // pls modify ale (last term is the shadow zone)
+        dist = 4*pow(10, -6)*pow(npixels,3)-0.0002*pow(npixels,2)+0.0063*npixels+0.9476 + altitude/tan((FOV_VERTICAL/2));  // pls modify ale (last term is the shadow zone)
       }
       else{  // catch errors
         dist = 0; 
