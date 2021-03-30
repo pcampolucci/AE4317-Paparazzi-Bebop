@@ -43,6 +43,7 @@ struct PotentialMap potential;                  // potential map used to find th
 bool out_of_bounds = false;                     // check if trajectory length exceeds the limits
 uint32_t last_size_x = 0;
 uint32_t last_size_y = 0;
+bool verbose = false;
 
 /*
  * Do the actual magic
@@ -137,8 +138,6 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
   // update old field information 
   calc_potential_field(gx, gy, ox, oy, reso, rr, sx, sy);
 
-  VERBOSE_PRINT("1\n");
-
   // search path
   double d = hypot(sx - gx, sy - gy);
   int ix = round((sx - potential.minx) / reso);
@@ -146,8 +145,6 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
   int minix = 0;
   int miniy = 0;
   double p;
-
-  VERBOSE_PRINT("2\n");
 
   // construct solution Trajectory used to update the pointer
   // build two arrays of new solution coordinates
@@ -158,46 +155,39 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
   rx[0] = sx;
   ry[0] = sy;
 
-  VERBOSE_PRINT("3\n");
-
+  get_motion_model();
 
   while (d >= reso) {
-    VERBOSE_PRINT("3.1\n");
+    // VERBOSE_PRINT("3.1\n");
     double minp = INFINITY;
 
     double motion_len = sizeof(motion) / sizeof(motion[0]);
-    VERBOSE_PRINT(".23\n");
+
     for (int i = 0; i < motion_len; i++) {
       int inx = ix + motion[i].dx;
       int iny = iy + motion[i].dy;
-      VERBOSE_PRINT("3.3\n");
+
       int num_rows = potential.size_x;
       int num_cols = potential.size_y;
-      VERBOSE_PRINT("3.4\n");
+
       if (inx >= num_rows || iny >= num_cols || inx < 0 || iny < 0) {
         p = INFINITY;
-        // VERBOSE_PRINT("Outside potential \n");
       } else {
-        p = potential.pmap[iny*last_size_y + ix];
-        // VERBOSE_PRINT("Inside potential \n");
+        p = potential.pmap[iny*last_size_y + inx];
       }
-      VERBOSE_PRINT("3.5\n");
       if (minp > p) {
         minp = p;
         minix = inx;
         miniy = iny;
       }
-      VERBOSE_PRINT("3.6\n");
     }
 
     ix = minix;
     iy = miniy;
     double xp = ix * reso + potential.minx;
     double yp = iy * reso + potential.miny;
-    VERBOSE_PRINT("3.7\n");
-    d = hypot(gx - xp, gy - yp);
 
-    VERBOSE_PRINT("4\n");
+    d = hypot(gx - xp, gy - yp);
 
     // check if we are going out of bounds
     if(trajectory_size >= MAX_LENGTH_NEW_TRAJECTORY-1) {
@@ -207,22 +197,15 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
       trajectory_size += 1;
     }
 
-    VERBOSE_PRINT("5\n");
-
     // now we can expand the solution space and add a new point
     rx[trajectory_size-1] = xp;
     ry[trajectory_size-1] = yp;
-    // VERBOSE_PRINT("Found (%f/%f) as new optimal point at index %d\n", rx[trajectory_size-1], ry[trajectory_size-1], trajectory_size);
-
   }
 
   // update trajectory message 
   resulting_trajectory.x = rx;
   resulting_trajectory.y = ry;
   resulting_trajectory.size = trajectory_size;
-
-  VERBOSE_PRINT("6\n");
-
 }
 
 /*
@@ -238,14 +221,11 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
   if (sizeof(ox[0]) ==0 || sizeof(oy[0]) ==0){
     ox_len =0;
     oy_len =0;
-    VERBOSE_PRINT("OXLEN ISSUE");
   }
   else {
     ox_len = round(sizeof(ox) / sizeof(ox[0]));
     oy_len = round(sizeof(oy) / sizeof(oy[0]));
   }
-
-  VERBOSE_PRINT("1.1\n");
 
 
   // get map contour
@@ -254,15 +234,9 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
   double maxx = Max(Max(MaxArray(ox, ox_len), sx), gx) + AREA_WIDTH / 2.0;
   double maxy = Max(Max(MaxArray(oy, oy_len), sy), gy) + AREA_WIDTH / 2.0;
 
-  VERBOSE_PRINT("1.2\n");
-
   // get step resolution in the map
   uint32_t xw = round((maxx - potential.minx) / reso);
   uint32_t yw = round((maxy - potential.miny) / reso);
-
-  VERBOSE_PRINT("1.21\n");
-
-  VERBOSE_PRINT("1.3\n");
 
   // build an array representring the map
   last_size_x = xw;
@@ -270,8 +244,6 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
 
   potential.size_x = xw;
   potential.size_y = yw;
-
-  VERBOSE_PRINT("1.4\n");
 
   // populate map with values regarding potential
   for (uint32_t ix = 0; ix < xw; ix++) {
@@ -286,12 +258,9 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
       if(iy*yw + ix > MAX_PMAP_SIZE){
         break;
       }
-      
       potential.pmap[iy*yw + ix] = uf;
     }
   }
-
-  VERBOSE_PRINT("1.5\n");
 }
 
 /*
