@@ -214,10 +214,6 @@ bool updateTrajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_tra
   clock_t t_trajectory; 
   t_trajectory = clock();
 
-  if(new_inner != 0){
-    free(new_inner);
-  }
-
   struct OptimizedTrajectory new_inner = optimize_trajectory(obstacle_map, start_trajectory, size, n_obstacles);
 
   // override old trajectory with new one and zeroes if not getting all the space

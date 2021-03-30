@@ -74,6 +74,12 @@ struct TrajectoryList {
   uint8_t size;
 };
 
+// optimized trajectory
+struct OptimizedTrajectory {
+  int size;
+  struct EnuCoor_i buf[MAX_OPTIMIZER_SIZE];
+};
+
 // functions
 extern void orange_avoider_init(void);
 extern void orange_avoider_periodic(void);

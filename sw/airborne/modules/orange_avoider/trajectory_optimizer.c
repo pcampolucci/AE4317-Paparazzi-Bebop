@@ -80,17 +80,14 @@ struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obstacle_map, st
   if(out_of_bounds){
 
     VERBOSE_PRINT("[OPTIMIZER] Optimisation Failed! Keeping the old trajectory\n");
-    VERBOSE_PRINT("10\n");
+
     struct OptimizedTrajectory optimized_trajectory;
     optimized_trajectory.size = *current_length;
-    VERBOSE_PRINT("10.1\n");
-    VERBOSE_PRINT("CURRENT LENGTH IS %d \n", *current_length);
-    VERBOSE_PRINT("11\n");
+
     // then we go through the whole new Trajectory to assign the new values
     for (int i = 0; i < *current_length; i++) {
       optimized_trajectory.buf[i].x = start_trajectory[i].x;
       optimized_trajectory.buf[i].y = start_trajectory[i].y;
-      VERBOSE_PRINT("12\n");
     }
 
     out_of_bounds = false;
@@ -108,6 +105,7 @@ struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obstacle_map, st
   // first we reallocate once the Trajectory to the new length
   struct OptimizedTrajectory optimized_trajectory;
   optimized_trajectory.size = *current_length;
+
 
   // then we go through the whole new Trajectory to assign the new values
   for (int i = 1; i < resulting_trajectory.size-1; i++) {
