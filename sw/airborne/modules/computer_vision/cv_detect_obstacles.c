@@ -229,7 +229,7 @@ static struct image_t *object_detector(struct image_t *img)
   if (n_obstReal == 1 && n_obst == 1){
     //VERBOSE_PRINT("OBSTACLE DETECTOR OUTPUT %i, %i, %i, %i, %i, %i \n", obstacle_array[0], obstacle_array[1], obstacle_array[2], obstacle_array[3], obstacle_array[4], obstacle_array[5]);
     //VERBOSE_PRINT("COMPARISON %f, %f, %i, %i, %i, %f, %f, %f, %f \n", process_variables.altitude, process_variables.pitch, npix_dist_global, npix_headl_global, npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2], output_array[0]);
-    VERBOSE_PRINT("COMPARISON %f,%f,%i,%i,%i,%f,%f,%f \n", GetPosAlt(), stateGetNedToBodyEulers_f()->theta, npix_dist_global,npix_headl_global,npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2]);
+    //VERBOSE_PRINT("COMPARISON %f,%f,%i,%i,%i,%f,%f,%f \n", GetPosAlt(), stateGetNedToBodyEulers_f()->theta, npix_dist_global,npix_headl_global,npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2]);
   }
   // //{0, 20, 30, 2, 15, 20}
   
@@ -498,20 +498,20 @@ double distCalc(int nsectors, float heading){
       if (fabs(heading) < heading_threshold){  // if the obstacle is in the +- 10 degrees of the FOV
         dist = altitude/tan((FOV_VERTICAL/2));  // pls modify ale (last term is the shadow zone)
       }
-      else if (FOV_HORIZONTAL/2 > fabs(heading) > heading_threshold){ // if the obstacle is between +-10 to +-50 degrees 
+      else if (FOV_HORIZONTAL/2 > fabs(heading) && fabs(heading) > heading_threshold){ // if the obstacle is between +-10 to +-50 degrees 
         dist = altitude/tan((FOV_VERTICAL/2));  // pls modify ale (last term is the shadow zone)
       }
       else{  // catch errors
         dist = 0; 
-        VERBOSE_PRINT("Heading is equal to %f degrees, which higher than the maximum value of %f degrees \n", heading*180/pi,(FOV_HORIZONTAL/2)*180/pi);
+        //VERBOSE_PRINT("Heading is equal to %f degrees, which higher than the maximum value of %f degrees \n", heading*180/pi,(FOV_HORIZONTAL/2)*180/pi);
       }
     }
     else {
-      VERBOSE_PRINT("Amount of pixels is equal to %i while maximum is %i \n", npixels, SECTOR_HEIGHT*HEIGHT_PIXELS); 
+      //VERBOSE_PRINT("Amount of pixels is equal to %i while maximum is %i \n", npixels, SECTOR_HEIGHT*HEIGHT_PIXELS); 
     }
     if (dist > 10){  // last safety if dist gives a value outside the cyberzoo 
         dist = 0; 
-        VERBOSE_PRINT("Distance is equal to %f, which is out of bounds \n", dist);
+        //VERBOSE_PRINT("Distance is equal to %f, which is out of bounds \n", dist);
     }
     return dist; 
 }

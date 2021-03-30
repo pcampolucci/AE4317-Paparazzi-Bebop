@@ -98,6 +98,7 @@ static void color_detection_cb(uint8_t __attribute__((unused)) sender_id, struct
       //VERBOSE_PRINT("obstacle absolute : %f %f\n", POS_FLOAT_OF_BFP(absolute_position.x), POS_FLOAT_OF_BFP(absolute_position.y));
 
       if (!obstacle_already_in && n_obstacles < MAX_OBSTACLES_IN_MAP) {
+        VERBOSE_PRINT("Received valid obstacle message %f, %f, %f\n", msg->obstacles[i].distance, msg->obstacles[i].left_heading, msg->obstacles[i].right_heading);
         VERBOSE_PRINT("New Obstacle at: %f/%f, new size is %d\n", POS_FLOAT_OF_BFP(absolute_position.x), POS_FLOAT_OF_BFP(absolute_position.y), n_obstacles+1);
         // the obstacle is not in yet, we can add a new slot to the obstacle map
         n_obstacles += 1;
