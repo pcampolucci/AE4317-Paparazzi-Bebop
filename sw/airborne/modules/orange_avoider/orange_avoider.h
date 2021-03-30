@@ -23,6 +23,7 @@
 #define MAX_OBSTACLES_IN_MAP 25
 #define MAX_OBSTACLES_IN_MSG 5
 #define MAX_OPTIMIZER_SIZE 20
+#define MAX_PMAP_SIZE 10000
 
 // Obstacle struct used for optimization and avoidance
 struct Obstacle {
@@ -56,7 +57,7 @@ struct Trajectory {
 
 // whole potential map with size
 struct PotentialMap {
-  double **pmap;              
+  double pmap[MAX_PMAP_SIZE];              
   int size_x;
   int size_y;
   double minx;

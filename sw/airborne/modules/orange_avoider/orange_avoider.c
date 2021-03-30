@@ -45,7 +45,7 @@ static void buildOuterTrajectory(void);
 static void buildInnerTrajectory(uint8_t currentOuterTrajIndex);
 static void moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint);
 static void checkWaypointArrival(uint8_t waypoint_target, double *mseVar);
-static bool updateTrajectory(struct Obstacle *obstacle_map_ut, struct EnuCoor_i *start_trajectory, uint8_t *size);
+static bool updateTrajectory(struct Obstacle *obstacle_map_updated, struct EnuCoor_i *start_trajectory, uint8_t *size);
 static bool checkObstaclePresence(struct Obstacle *obstacle_map_check, int x_position, int y_position);
 
 // define and initialise global variables
