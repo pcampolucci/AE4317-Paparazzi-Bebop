@@ -120,7 +120,7 @@ struct ObstacleMsg global_obstacle_msg;
 
 // Define the arrays globally
 uint8_t masked_frame_f[SIZE_MASK_ARRAY];
-uint8_t black_array[SIZE_BLACK_ARRAY];
+uint8_t blackie_array[SIZE_BLACK_ARRAY];
 uint16_t obstacle_array[SIZE_OBST_ARRAY]; 
 float output_array[SIZE_OUTPUT_ARRAY];
 float output_array_real[SIZE_OUTPUT_ARRAY_REAL];
@@ -136,7 +136,7 @@ void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie);
 uint8_t getObstacles(uint8_t *black_array, uint16_t *obs_2);
 void headingCalc(int l_sec, int r_sec, float *head_array);
 double distCalc(int nsectors, float heading);
-void distAndHead(uint8_t n_obstacles, uint16_t *obstacle_array, float *input_array);
+void distAndHead(uint8_t n_obstacles, uint16_t *obstacle_array_local, float *input_array);
 int getRealValues(float *array); //ALE: Changed from void to uint8_t to int
 static struct image_t *object_detector(struct image_t *img);
 
@@ -205,10 +205,10 @@ static struct image_t *object_detector(struct image_t *img)
   uint32_t count = mask_it(img, draw, lum_min, lum_max, cb_min, cb_max, cr_min, cr_max, masked_frame_f);
   //clock_t maskit_2 = clock();
   //clock_t blackArray_1 = clock();
-  getBlackArray(0.8, masked_frame_f, black_array);  // Make threshold slider
+  getBlackArray(0.8, masked_frame_f, blackie_array);  // Make threshold slider
   //clock_t blackArray_2 = clock();
   //clock_t getObstacles_1 = clock();
-  n_obst = getObstacles(black_array, obstacle_array);
+  n_obst = getObstacles(blackie_array, obstacle_array);
   //clock_t getObstacles_2 = clock();
   // //clock_t distAndHead_1 = clock();
   // VERBOSE_PRINT("AMOUNT OF OBSTACLES IS EQUAL TOO %i \n", n_obst);
@@ -534,7 +534,7 @@ double distCalc(int nsectors, float heading){
  *   Purpose: calculates the distance and heading in meters and radians respectively for ALL the obstacles detected. 
  *            it takes the distance and heading in pixels as input. 
  */
-void distAndHead(uint8_t n_obstacles, uint16_t *obstacle_array, float *input_array){
+void distAndHead(uint8_t n_obstacles, uint16_t *obstacle_array_local, float *input_array){
     // define local variables 
     int input_dist = 0;
     int input_headl = 0; 
@@ -546,9 +546,9 @@ void distAndHead(uint8_t n_obstacles, uint16_t *obstacle_array, float *input_arr
     // loops through the amount of obstacles and calculates the distance and heading
     for(int i=0; i < n_obstacles*3; i=i+3){  // each obstacles occupies three entries in the array
         // define local variables with the obstacle data
-        input_dist = obstacle_array[i];
-        input_headl = obstacle_array[i+1];
-        input_headr = obstacle_array[i+2]; 
+        input_dist = obstacle_array_local[i];
+        input_headl = obstacle_array_local[i+1];
+        input_headr = obstacle_array_local[i+2]; 
         // safety net for out of bounds 
         if (i > SIZE_OUTPUT_ARRAY){
           VERBOSE_PRINT("Distance and heading loop out of bounds");

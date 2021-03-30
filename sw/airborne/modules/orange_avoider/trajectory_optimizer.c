@@ -220,8 +220,19 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
 
   //VERBOSE_PRINT("Calculating Potential Map \n");
 
-  int ox_len = round(sizeof(ox) / sizeof(ox[0]));
-  int oy_len = round(sizeof(oy) / sizeof(oy[0]));
+  int ox_len = 0;
+  int oy_len = 0;
+  if (sizeof(ox[0]) ==0 || sizeof(oy[0]) ==0){
+    ox_len =0;
+    oy_len =0;
+    VERBOSE_PRINT("OXLEN ISSUE");
+  }
+  else {
+    ox_len = round(sizeof(ox) / sizeof(ox[0]));
+    oy_len = round(sizeof(oy) / sizeof(oy[0]));
+  }
+
+
   // get map contour
   potential.minx = Min(Min(MinArray(ox, ox_len), sx), gx) - AREA_WIDTH / 2.0;
   potential.miny = Min(Min(MinArray(oy, oy_len), sy), gy) - AREA_WIDTH / 2.0;
