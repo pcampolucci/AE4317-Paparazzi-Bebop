@@ -53,6 +53,7 @@
 #define SIZE_BLACK_ARRAY 4992  // size is 48x104 = 4992
 #define SIZE_OBST_ARRAY 30  // size is 10x3 = 30
 #define SIZE_OUTPUT_ARRAY 30  // size is the same as obst array
+#define SIZE_OUTPUT_ARRAY_REAL 12 //3*4=12, 3 = entries per obstacle, 4 = max number of obstacles
 
 #define FOV_HORIZONTAL 1.850049 // [rad], equivalent to 106 degrees
 #define FOV_VERTICAL 0.912849  // [rad] equivalent to 52.3024 degrees 
@@ -122,7 +123,7 @@ uint8_t masked_frame_f[SIZE_MASK_ARRAY];
 uint8_t black_array[SIZE_BLACK_ARRAY];
 uint16_t obstacle_array[SIZE_OBST_ARRAY]; 
 float output_array[SIZE_OUTPUT_ARRAY];
-//float output_array_real[ROW_OUT*ROW_OUT];
+float output_array_real[SIZE_OUTPUT_ARRAY_REAL];
 
 
 // Function declaration
@@ -134,7 +135,7 @@ uint32_t mask_it(struct image_t *img, bool draw,
 void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie);
 uint8_t getObstacles(uint8_t *black_array, uint16_t *obs_2);
 void headingCalc(int l_sec, int r_sec, float *head_array);
-double distCalc(int nsectors);
+double distCalc(int nsectors, float heading);
 void distAndHead(uint8_t n_obstacles, uint16_t *obstacle_array, float *input_array);
 int getRealValues(float *array); //ALE: Changed from void to uint8_t to int
 static struct image_t *object_detector(struct image_t *img);
@@ -191,6 +192,7 @@ static struct image_t *object_detector(struct image_t *img)
   cr_max = cod_cr_max;
   draw = cod_draw;
   uint8_t n_obst = 0; 
+  int n_obstReal = 0;
 
   // Make sure the arrays are clean
   memset(masked_frame_f, 0, SIZE_MASK_ARRAY*sizeof(uint8_t));
@@ -220,15 +222,15 @@ static struct image_t *object_detector(struct image_t *img)
   //    VERBOSE_PRINT("FINAL OUTPUT %i with value : %f, %f, %f \n",i, output_array[i*3],output_array[i*3 +1],output_array[i*3+2]);
   // }
 
-  // n_obstReal = getRealValues(output_array_real,&process_variables);
+  n_obstReal = getRealValues(output_array_real);
   
 
-  // //ALE DATA ANALYSIS
-  // if (n_obstReal == 1)
-  // {
-  //   VERBOSE_PRINT("OBSTACLE DETECTOR OUTPUT %i, %i, %i, %i, %i, %i \n", obstacle_array[0], obstacle_array[1], obstacle_array[2], obstacle_array[3], obstacle_array[4], obstacle_array[5]);
-  //   VERBOSE_PRINT("COMPARISON %f, %f, %i, %i, %i, %f, %f, %f, %f \n", process_variables.altitude, process_variables.pitch, npix_dist_global, npix_headl_global, npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2], output_array[0]);
-  // }
+  //ALE DATA ANALYSIS
+  if (n_obstReal == 1 && n_obst == 1){
+    //VERBOSE_PRINT("OBSTACLE DETECTOR OUTPUT %i, %i, %i, %i, %i, %i \n", obstacle_array[0], obstacle_array[1], obstacle_array[2], obstacle_array[3], obstacle_array[4], obstacle_array[5]);
+    //VERBOSE_PRINT("COMPARISON %f, %f, %i, %i, %i, %f, %f, %f, %f \n", process_variables.altitude, process_variables.pitch, npix_dist_global, npix_headl_global, npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2], output_array[0]);
+    //VERBOSE_PRINT("COMPARISON %f,%f,%i,%i,%i,%f,%f,%f \n", GetPosAlt(), stateGetNedToBodyEulers_f()->theta, npix_dist_global,npix_headl_global,npix_headr_global, output_array_real[0], output_array_real[1], output_array_real[2]);
+  }
   // //{0, 20, 30, 2, 15, 20}
   
   // // update the obstacle message 
@@ -257,11 +259,20 @@ static struct image_t *object_detector(struct image_t *img)
 }
 
 /*
- * Function description
+ * Function: getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie);
+ * ----------------------------
+ *   Returns void
+ *   
+ *   threshold: value which determines how many black pixels need to be present in a sector to make the sector black
+ *   maskie: input array which contains all the pixel values in the picture (0 or 1) (PORTRAIT PICTURE)
+ *   blackie: output array in which the sector values will be stored (0 or 1). (LANDSCAPE PICTURE)
+ *
+ *
+ *   Purpose: Decrease the resolution of the picture while also rotating the picture to landscape mode
  */
 void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie){
-    float sum_sec_line = 0; //changed from int
-    float sum_sec_tot = 0; //changed from int
+    float sum_sec_line = 0;  
+    float sum_sec_tot = 0; 
     float average = 0; 
     int countie = 0; 
     //Loops through the cols (so in the rotated pic from up to down)
@@ -296,70 +307,84 @@ void getBlackArray(float threshold, uint8_t *maskie, uint8_t *blackie){
 }
 
 /*
- * Function description
+ * Function: getObstacles(uint8_t *black_array, uint16_t *obs_2);
+ * ----------------------------
+ *   Returns amount of detected obstacles
+ *   
+ *   black_array: array which consists of black and white sectors
+ *   obs_2: array in which the output data will be written, of the format: 
+ *                   {distance_pixels_obstacle1, heading_pixels_left_obstacle1, heading_pixels_right_obstacle1, 
+ *                    distance_pixels_obstacle2, heading_pixels_left_obstacle2, heading_pixels_right_obstacle2, ...}
+ *
+ *
+ *   Purpose: the purpose of this function is to detect all the obstacles in the post-processed black and white picture. 
  */
-uint8_t getObstacles(uint8_t *black_array, uint16_t *obs_2){
-  // Declare local variables
-  // int nsectrow = AMOUNT_OF_COLUMNS; 
-  // int nsectcol = AMOUNT_OF_ROWS;
-  
-  int obs_1[obstaclerows][3]  ={0};
-  int obstacle_line[AMOUNT_OF_COLUMNS]; 
-  // int rewriter = 0,rewriter2  = 0;
-  int p=0, pnew=0, count1=0; //, io=0;
-  // int minl=0, maxr=0, cr=0;
-  int black_counter_row = 0;
 
-  // Find all white to black/ black to white steps in the line
-  for (int i=0; i<AMOUNT_OF_ROWS;i++){  // Loops through the amount of rows  
-    bool begin_obstacle_detected = false;
-    bool end_obstacle_detected = false; 
-    int row_begin_obstacle = 0; 
-    int column_begin_obstacle = 0; 
-    int column_end_obstacle = 0;  
-    int black_counter_col = 0; 
- 
-    for (int j=0; j<AMOUNT_OF_COLUMNS-1;j++){ // Loops through the amount of columns 
-      p       = black_array[i*AMOUNT_OF_COLUMNS+j];  //check-value of current sector
-      pnew    = black_array[i*AMOUNT_OF_COLUMNS+j+1];  //check-value of following sector
-      if (p + pnew == 2){  // Detect black lines
-        black_counter_col++; 
+uint8_t getObstacles(uint8_t *black_array, uint16_t *obs_2){
+  // Define local variables
+  int obs_1[obstaclerows][3]  ={0};  // array of the format {left_column_index_black_sequence, right_column_index_black_sequence, row_index}
+  int obstacle_line[AMOUNT_OF_COLUMNS];  // stores the location of a 
+  int p=0;  //  stores the value of the current sector (0 or 1)
+  int pnew=0; // stores the value of the next adjecent sector (0 or 1)
+  int count1=0;  // counts the amount of obstacles slices detected
+  int black_counter_row = 0;  // counts amount of black rows under each other 
+
+  /*
+   * Find all the white to black to white steps in a row line, output saved in obs_1
+   *    Example input: {0,0,1,1,1,1,0,0,0,1,1,1,0,0} => finds the sequence of black pixels in a row of white pixels
+   *                                                 => two objects detected in this row
+   *                                                 => does this for every row and stores the location in obs_1 
+  */                                            
+  for (int i=0; i<AMOUNT_OF_ROWS;i++){  // Loops through the amount of rows 
+    // Define local variables which are reset every new row
+    bool begin_obstacle_detected = false;  // keeps track if the begin of an obstacle slice is detected
+    bool end_obstacle_detected = false;  // keeps track if the end of an obstacle slice is detected
+    int row_begin_obstacle = 0;  // index of the row at which the obstacle slice is detected
+    int column_begin_obstacle = 0;  // index of the column where the begin of the obstacle slice is detected 
+    int column_end_obstacle = 0;  // index of the coumn where the end of the obstacle slice is detected 
+    int black_counter_col = 0;  // counts the amount of adjecent black sectors 
+
+    for (int j=0; j<AMOUNT_OF_COLUMNS-1;j++){  // Loops through the amount of columns, entire for-loop = 1 row
+      p = black_array[i*AMOUNT_OF_COLUMNS+j];  // check-value of current sector
+      pnew = black_array[i*AMOUNT_OF_COLUMNS+j+1];  // check-value of following sector
+      if (p + pnew == 2){  // Detects two adjecent black sectors
+        black_counter_col++;
       }     
-      else if (p - pnew < 0 && !begin_obstacle_detected){  //activate on white-to-black step, so begin of obstacle  
-        row_begin_obstacle = i;  // sets row
-        column_begin_obstacle = j;  // set index begin obstacle
-        begin_obstacle_detected = true;
+      else if (p - pnew < 0 && !begin_obstacle_detected){  // activate on white-to-black step, so begin of obstacle  
+        row_begin_obstacle = i;  // sets row index
+        column_begin_obstacle = j;  // sets column index of begin obstacle
+        begin_obstacle_detected = true;  // indicates the begin is detected
       }
       else if (begin_obstacle_detected && p - pnew > 0){ // detect black-to-white step, so end of obstacle
-         column_end_obstacle = j+1;  // set index end obstacle
-         begin_obstacle_detected = false;
+         column_end_obstacle = j+1;  // sets column index end obstacle
+         begin_obstacle_detected = false;  
          end_obstacle_detected = true; 
       }      
-      if (end_obstacle_detected)
-      {
-        obs_1[count1][0]=row_begin_obstacle;  // add row number 
-        obs_1[count1][1]=column_begin_obstacle;  // add column number begin
-        obs_1[count1][2]=column_end_obstacle;  // add column number end
+      if (end_obstacle_detected){  // enters if the entire obstacle slice is detected
+        obs_1[count1][0]=row_begin_obstacle;  // saves the row at which the obstacle slice is detected
+        obs_1[count1][1]=column_begin_obstacle;  // saves the column at which the begin of the obstacle slice is detected
+        obs_1[count1][2]=column_end_obstacle;  // saves the column at which the end of the obstacle slice is detected
         count1 +=1;
         end_obstacle_detected = false; 
       }
     }
-    if (black_counter_col >= AMOUNT_OF_COLUMNS-1){
+    if (black_counter_col >= AMOUNT_OF_COLUMNS-1){  // goes in if an entire row of black pixels is detected 
       black_counter_row++; 
     }          
   }
-  // VERBOSE_PRINT("LOOP 1: ROWS 0 %i, %i, %i \n", obs_1[0][0], obs_1[0][1], obs_1[0][2]);
-  // VERBOSE_PRINT("LOOP 1: ROWS 1 %i, %i, %i \n", obs_1[1][0], obs_1[1][1], obs_1[1][2]);
-  // VERBOSE_PRINT("LOOP 1: ROWS 2 %i, %i, %i \n", obs_1[2][0], obs_1[2][1], obs_1[2][2]);
-  // VERBOSE_PRINT("LOOP 1: ROWS 3 %i, %i, %i \n", obs_1[3][0], obs_1[3][1], obs_1[3][2]);
-
-  // Creates array which contains values which show the contour of the obstacles
+  /*
+   * Creates array which contains values which show the contour of the obstacles. 
+   * The obst_1 array consists of many slices of obstacles
+   * Purpose of this code is to only select the most outer edge of the obstacle 
+   *    Example output array: {0,0,0,8,9,8,0,0,0,0} => obstacle is detected with a height of 8, 9 and 8 sectors counted from the top
+  */      
   for (int i=0; i<AMOUNT_OF_COLUMNS; i++){  // i is the number of columns
-    int current_max_value = 0; 
-    int potential_max_value = 0; 
-    bool part_of_obstacle = false; 
-    for (int j = 0; j<count1; j++){ 
-      if (i > obs_1[j][1] && i < obs_1[j][2] && obs_1[j][0] > black_counter_row){   // if in the interval
+    // Define local variables 
+    int current_max_value = 0;  // current maximum height of an obstacle detected
+    int potential_max_value = 0;  // potential new height of an obstacle
+    bool part_of_obstacle = false;  // indicates if the value belongs to an obstacle or the noise in the picture
+    for (int j = 0; j<count1; j++){  // loops through the all the slices detected
+      if (i > obs_1[j][1] && i < obs_1[j][2] && obs_1[j][0] > black_counter_row){  // if in the interval
         potential_max_value = obs_1[j][0];  // sets the current height equal to the variable
         if (potential_max_value > current_max_value){  // checks if the potential max value is higher than the one already found
           current_max_value = potential_max_value; 
@@ -368,52 +393,49 @@ uint8_t getObstacles(uint8_t *black_array, uint16_t *obs_2){
       }
     }
     if (part_of_obstacle){
-      obstacle_line[i] = current_max_value;
+      obstacle_line[i] = current_max_value;  // saves value in the contour list
     }
     else{
-      obstacle_line[i] = 0;
+      obstacle_line[i] = 0;  // if no obstacle was detected in the column
     }
   }
 
-  // for (int i = 0; i<AMOUNT_OF_COLUMNS; i++){
-  //   VERBOSE_PRINT("OBSTACLE LINE NUMBER %i with value : %i, \n",i, obstacle_line[i]);
-  // }
-
-  // Convert the contour to obstacles
-  int total_amount_of_obst = 0; 
-  bool start_blue = false;
-  bool end_blue = false;
-  int begin = 0;
-  int end = 0;
-  int dist = 0;
-  for(int i=0;i<AMOUNT_OF_COLUMNS;i++){
-    if(obstacle_line[i]!=0 && !start_blue){
+  /*
+   * Detects obstacles from the contours
+   * Finds the maximum height, most left side and most right side of all the obstacles
+  */  
+  // Define local variables
+  int total_amount_of_obst = 0;  // keeps track of the number of obstacles
+  bool start_blue = false;  // is the start edge of an obstacle detected
+  bool end_blue = false;  // is the end edge of an obstacle detected
+  int begin = 0;  // index of begin edge
+  int end = 0;  // index of end edge
+  int dist = 0;  // height of the obstacle
+  for(int i=0;i<AMOUNT_OF_COLUMNS;i++){  // goes through the entire contour array
+    if(obstacle_line[i]!=0 && !start_blue){  // 0 value of the contour means height is zero => no obstacle, only goes in if not zero
       begin = i;
       dist = obstacle_line[i];
       start_blue = true;
     }
-    if(start_blue && !end_blue){
-      if(obstacle_line[i]>dist){
+    if(start_blue && !end_blue){  // begin of an obstacle is detected
+      if(obstacle_line[i]>dist){  // finds the top of an obstacle
         dist = obstacle_line[i];
       }
-      if(obstacle_line[i]==0){
+      if(obstacle_line[i]==0){  // end of an obstacle is detected
         end = i;
         end_blue = true;
       }
     }
     if(end_blue){
-      obs_2[total_amount_of_obst*3 + 0] = dist;
-      obs_2[total_amount_of_obst*3 + 1] = begin;
-      obs_2[total_amount_of_obst*3 + 2] = end;
+      obs_2[total_amount_of_obst*3 + 0] = dist;  // saves data in output array
+      obs_2[total_amount_of_obst*3 + 1] = begin;  // saves data in output array
+      obs_2[total_amount_of_obst*3 + 2] = end;  // saves data in output array
       total_amount_of_obst += 1;
       start_blue = false;
       end_blue = false;
     }
   }
   return total_amount_of_obst; 
-  // for (int i = 0; i<total_amount_of_obst; i++){
-  //   VERBOSE_PRINT("OBSTACLE LINE NUMBER %i with value : %i, %i, %i \n",i, obs_2[i*3],obs_2[i*3 +1],obs_2[i*3+2]);
-  // }
 }
 
 
@@ -448,142 +470,147 @@ void headingCalc(int l_sec, int r_sec, float *head_array){
 }
 
 /*
- * Function description
+ * Function: double distCalc(int nsectors, float heading);
+ * ----------------------------
+ *   Returns the calculated distance in meters
+ *
+ *   nsectors: number of sectors which are black, counted from the top of the picture
+ *   heading: number of sectors which correspond with the middle of the detected obstacle, counted from the left of the picture
+ *
+ *   Purpose: takes the amount of sectors for the heading and distance as input and calculates distance to the obstacle as output 
  */
-double distCalc(int nsectors){
-    float altitude = GetPosAlt();
-    int npixels = (AMOUNT_OF_ROWS - 1 - nsectors)*SECTOR_HEIGHT;
-    double dist = 0; 
-    double pitch = stateGetNedToBodyEulers_f()->theta; 
-    double pitch_pix = (pitch/((FOV_VERTICAL)/57.2958))*SECTOR_HEIGHT*AMOUNT_OF_ROWS;
-    // double p00 =  -4.045e+05;
-    // double p10 = 156.6;
-    // double p01 = 2.232e+06;
-    // double p20 = -0.03603;
-    // double p11 = -574.2;
-    // double p02 = -4.105e+06;
-    // double p21 = 0.06744;
-    // double p12 = 526.3 ;
-    // double p03 = 2.517e+06;
-    // double x;
-    // double y;
-    npixels = npixels + round(pitch_pix);
-    npix_dist_global = npixels; 
-    // x = npixels;
-    // y = altitude;
+double distCalc(int nsectors, float heading){
+    float altitude = GetPosAlt();  // get the current altitude
+    int npixels = (AMOUNT_OF_ROWS - 1 - nsectors)*SECTOR_HEIGHT;  // gets amount of white pixels counted from the bottom of the picture
+    double dist = 0;  
+    double pitch = stateGetNedToBodyEulers_f()->theta;  // get the current pitch angle [rad]
+    double pitch_pix = (pitch/((FOV_VERTICAL)))*SECTOR_HEIGHT*AMOUNT_OF_ROWS;  // convert the pitch angle in percentage of pixels
+    float heading_threshold = 0; 
 
-    if (npixels <= 1){
+    npixels = npixels + round(pitch_pix);  // add the pitch pixels to the amount of white pixels to account for tilt
+    npix_dist_global = npixels; 
+
+
+    if (npixels <= 1){  // safety in case all pixels are black => distance equal to zero
         dist = 0;
     }
-    // else if (npixels < 10000){
-    //     dist = (1/(pow(0.45,(npixels/60))))-1 + altitude/tan((FOV_vertical/2)/57.2958);
-    // }
-    else if (npixels < 300){
-        //dist = 0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels))) + altitude/tan((FOV_vertical/2)/57.2958);
-        //dist = p00 + p10*x + p01*y + p20*pow(x,2) + p11*x*y + p02*pow(y,2) + p21*pow(x,2)*y + p12*x*pow(y,2) + p03*pow(y,3) ;
-        dist = altitude*2.2*(0.01894959 - (-0.01608105/-0.02331507)*(1 - pow(e,(0.02331507*npixels)))) + altitude/tan((FOV_VERTICAL/2));
-        //VERBOSE_PRINT("THE DISTANCE IN HERE IS %lf ", dist);
-    }
-    if (dist > 10){
+    else if (npixels < SECTOR_HEIGHT*HEIGHT_PIXELS){  // only goes in if the amount of pixels is within bounds maximum is entire picture white
+      if (fabs(heading) < heading_threshold){  // if the obstacle is in the +- 10 degrees of the FOV
+        dist = altitude/tan((FOV_VERTICAL/2));  // pls modify ale (last term is the shadow zone)
+      }
+      else if (FOV_HORIZONTAL/2 > fabs(heading) && fabs(heading) > heading_threshold){ // if the obstacle is between +-10 to +-50 degrees 
+        dist = altitude/tan((FOV_VERTICAL/2));  // pls modify ale (last term is the shadow zone)
+      }
+      else{  // catch errors
         dist = 0; 
-        VERBOSE_PRINT("DIST IS LARGER THAN 10");
+        //VERBOSE_PRINT("Heading is equal to %f degrees, which higher than the maximum value of %f degrees \n", heading*180/pi,(FOV_HORIZONTAL/2)*180/pi);
+      }
+    }
+    else {
+      //VERBOSE_PRINT("Amount of pixels is equal to %i while maximum is %i \n", npixels, SECTOR_HEIGHT*HEIGHT_PIXELS); 
+    }
+    if (dist > 10){  // last safety if dist gives a value outside the cyberzoo 
+        dist = 0; 
+        //VERBOSE_PRINT("Distance is equal to %f, which is out of bounds \n", dist);
     }
     return dist; 
 }
 
 /*
- * Function description
+ * Function: distAndHead(uint8_t n_obstacles, uint16_t *obstacle_array, float *input_array);
+ * ----------------------------
+ *   Returns void
+ *
+ *   n_obstacles: number of detected obstacles
+ *   obstacle_array: input array with intput data of the format: 
+ *                   {distance_pixels_obstacle1, heading_pixels_left_obstacle1, heading_pixels_right_obstacle1, 
+ *                    distance_pixels_obstacle2, heading_pixels_left_obstacle2, heading_pixels_right_obstacle2, ...}
+ *   input_array: output array in which the output data will be written, the format is: 
+ *                   {distance_meters_obstacle1, heading_radians_left_obstacle1, heading_radians_right_obstacle1, 
+ *                    distance_meters_obstacle2, heading_radians_left_obstacle2, heading_radians_right_obstacle2, ...}
+ *
+ *
+ *   Purpose: calculates the distance and heading in meters and radians respectively for ALL the obstacles detected. 
+ *            it takes the distance and heading in pixels as input. 
  */
 void distAndHead(uint8_t n_obstacles, uint16_t *obstacle_array, float *input_array){
+    // define local variables 
     int input_dist = 0;
     int input_headl = 0; 
     int input_headr = 0; 
     float heading_array[2] = {};
     uint8_t obst_counter = 0; 
-    for(int i=0; i < n_obstacles*3; i=i+3){
-        // check for zeros 
+    float middle_heading = 0; 
+
+    // loops through the amount of obstacles and calculates the distance and heading
+    for(int i=0; i < n_obstacles*3; i=i+3){  // each obstacles occupies three entries in the array
+        // define local variables with the obstacle data
         input_dist = obstacle_array[i];
         input_headl = obstacle_array[i+1];
         input_headr = obstacle_array[i+2]; 
+        // safety net for out of bounds 
         if (i > SIZE_OUTPUT_ARRAY){
-          VERBOSE_PRINT("YOWWW OUTSIDE BOUNDS CHECK THIS SHIT");
+          VERBOSE_PRINT("Distance and heading loop out of bounds");
           break; 
         }
+        // calculates output data for every obstacle 
         else{
           headingCalc(input_headl, input_headr, heading_array);
-          input_array[i] = distCalc(input_dist);
           input_array[i+1] = heading_array[0];
           input_array[i+2] = heading_array[1]; 
+          middle_heading = (input_array[i+1]+input_array[i+2])/2;  // middle array is used as input for the distance calculator
+          input_array[i] = distCalc(input_dist, middle_heading);
         }
         obst_counter++; 
     }
 } 
 
 
-// int getRealValues(float *array, struct process_variables_t *var){ //Ale Changed
-//   // Get the coordinates
-//   //float pole_array_tot[N_OBST*2] = {-0.05, -1.9, 3.6, -0.15, 0.4, 0.3, -3.3, 0.2};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
-//   float pole_array_tot[N_OBST*2] = {-1.8, -3.4, -1.8, 0.5, 1.5, -2.5, 2.8, 2.5};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
-//   //float pole_array_tot[N_OBST*2] = {-1.8, 0.5};
-//   float poles_in_view[N_OBST*2]; 
-//   float drone_posx = GetPosX();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->y
-//   float drone_posy = GetPosY();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->x
-//   float drone_posz = GetPosAlt(); 
-//   float drone_yaw = stateGetNedToBodyEulers_f()->psi; 
-//   float heading_old = 0; 
-//   float heading_sign = 0;
-//   float heading = 0;
-//   float FOV_hor = var->FOV_horizontal; 
-//   int count = 0; //changed to int
-//   float width_pole = 0.2; 
-//   float distance = 0; 
-//   float angle = 0;
+int getRealValues(float *array){ 
+  // Get the coordinates
+  //float pole_array_tot[N_OBST*2] = {-0.05, -1.9, 3.6, -0.15, 0.4, 0.3, -3.3, 0.2};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
+  float pole_array_tot[N_OBST*2] = {-1.8, -3.4, -1.8, 0.5, 1.5, -2.5, 2.8, 2.5};  // Format is: {x_location_pole1, y_location_pole1, x_location_pole2, ...}
 
-//   float ax = 0;
-//   float ay = 0;
-//   float bx = 0;
-//   float by = 0;
+  float drone_posx = GetPosX();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->y
+  float drone_posy = GetPosY();  //NO LONGER FLIPPED! // Flipped because of logger //Possibly try stateGetPositionNed_i()->x
+  //float drone_posz = GetPosAlt(); 
+  float drone_yaw = stateGetNedToBodyEulers_f()->psi; 
+
+  float FOV_hor = FOV_HORIZONTAL; 
+  int count = 0; //changed to int
+  float width_pole = 0.2; 
+  float distance = 0; 
+  float heading = 0;
+
+  float ax = 0;
+  float ay = 0;
+  float bx = 0;
+  float by = 0;
   
-//   // Get the poles in view
-//   for (int i=0; i<N_OBST*2; i=i+2){
-//     //Replaced heading function
-//     //                pole_x             drone_x      pole_y              drone_y           yaw
-//     heading_sign  = atan((pole_array_tot[i]-drone_posx)/(pole_array_tot[i+1]-drone_posy)) + (- drone_yaw); //this is used to calcuated sign of the angle (heading2/fabs(heading2)) gives 1 or -1
-//     distance = sqrt(pow((drone_posx-pole_array_tot[i]),2) + pow((drone_posy-pole_array_tot[i+1]),2));  // Real Distance
-//     //VERBOSE_PRINT("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII is equal TOOOOOOOO %i", i);
-//     //Formula for angle between two vectors
-//     //nominator = (distance*sin(drone_yaw)-drone_posx)*(pole_array_tot[i]-drone_posx)+(distance*cos(drone_yaw)-drone_posy)*(pole_array_tot[i+1]-drone_posy)
-//     //denominator = sqrt(pow((distance*sin(drone_yaw)-drone_posx),2)+pow((distance*cos(drone_yaw)-drone_posy),2))*sqrt(pow((pole_array_tot[i]-drone_posx),2)+pow((pole_array_tot[i+1]-drone_posy),2))
-//     heading_old = acos(((distance*sin(drone_yaw)-drone_posx)*(pole_array_tot[i]-drone_posx)+(distance*cos(drone_yaw)-drone_posy)*(pole_array_tot[i+1]-drone_posy))/(sqrt(pow((distance*sin(drone_yaw)-drone_posx),2)+pow((distance*cos(drone_yaw)-drone_posy),2))*sqrt(pow((pole_array_tot[i]-drone_posx),2)+pow((pole_array_tot[i+1]-drone_posy),2))));
-//     //         ^ this bracket stuff gives negative if to the left of the drone
-//     ax = (distance*sin(drone_yaw)-drone_posx);
-//     by = (pole_array_tot[i+1]-drone_posy);
-//     ay =(distance*cos(drone_yaw)-drone_posy);
-//     bx = (pole_array_tot[i]-drone_posx);
-//     angle = -atan2( ax*by - ay*bx, ax*bx + ay*by );
-    
-//     if (heading<(pi/2)){
-//       heading = heading_old*(heading_sign/fabs(heading_sign));
-//     }
-//     else{
-//       heading = -heading_old*(heading_sign/fabs(heading_sign));
-//     }
+  // Get the poles in view
+  for (int i=0; i<N_OBST*2; i=i+2){
+    //calculate the distance of pole
+    distance = sqrt(pow((drone_posx-pole_array_tot[i]),2) + pow((drone_posy-pole_array_tot[i+1]),2));  // Real Distance
 
-//     //VERBOSE_PRINT("HEADING NEW %i, %f \n", i, (angle*180/pi));
-//     //VERBOSE_PRINT("HEADING %i, %f \n",i, (heading*180/pi));
-//     //VERBOSE_PRINT("IF STATEMENT %i, %f \n", (i+1), (fabs(heading)+atan((width_pole/2)/distance)));
-//     if (fabs(angle)+atan((width_pole/2)/distance) < FOV_hor/2){
-//       poles_in_view[count] = pole_array_tot[i];
-//       poles_in_view[count] = pole_array_tot[i+1];
-//       array[count] = distance;                                   // Real Distance
-//       array[count+1] = angle - atan((width_pole/2)/distance);  // Real Heading left
-//       array[count+2] = angle + atan((width_pole/2)/distance);  // Real Heading right
-//       count = count + 3; 
-//       //VERBOSE_PRINT("WE ARE INNNNNNNNNNNNNNNNNNNN \n");
-//     }
-//   }
-//   return (count/3); //removed /3
-// }
+    //Calculate heading of pole (formula for angle between two vectors)
+    //nominator = (distance*sin(drone_yaw)-drone_posx)*(pole_array_tot[i]-drone_posx)+(distance*cos(drone_yaw)-drone_posy)*(pole_array_tot[i+1]-drone_posy)
+    //denominator = sqrt(pow((distance*sin(drone_yaw)-drone_posx),2)+pow((distance*cos(drone_yaw)-drone_posy),2))*sqrt(pow((pole_array_tot[i]-drone_posx),2)+pow((pole_array_tot[i+1]-drone_posy),2))
+    ax = (distance*sin(drone_yaw)-drone_posx);
+    by = (pole_array_tot[i+1]-drone_posy);
+    ay =(distance*cos(drone_yaw)-drone_posy);
+    bx = (pole_array_tot[i]-drone_posx);
+    heading = -atan2( ax*by - ay*bx, ax*bx + ay*by );
+    
+    //if in the field of view, add to array
+    if (fabs(heading)+atan((width_pole/2)/distance) < FOV_hor/2){
+      array[count] = distance;                                   // Real Distance
+      array[count+1] = heading - atan((width_pole/2)/distance);  // Real Heading left
+      array[count+2] = heading + atan((width_pole/2)/distance);  // Real Heading right
+      count = count + 3; 
+    }
+  }
+  return (count/3); 
+}
 
 
 /*

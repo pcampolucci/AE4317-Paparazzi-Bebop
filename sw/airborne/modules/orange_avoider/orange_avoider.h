@@ -20,7 +20,7 @@
 #define OUTER_TRAJECTORY_LENGTH 3
 #define INNER_TRAJECTORY_LENGTH 5
 #define INNER_TRAJECTORY_SPACE 25
-#define MAX_OBSTACLES_IN_MAP 20
+#define MAX_OBSTACLES_IN_MAP 25
 #define MAX_OBSTACLES_IN_MSG 5
 
 // Obstacle struct used for optimization and avoidance

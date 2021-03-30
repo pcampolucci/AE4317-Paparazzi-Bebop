@@ -23,7 +23,7 @@
 #define OSCILLATION_DETECTION_LENGTH 6    // the number of previous positions used to check oscillations
 #define GRID_SIZE 0.5                     // size of the motion grid
 #define DRONE_RADIUS 0.3                  // circular space occupied by the drone in motion
-#define MAX_LENGTH_NEW_TRAJECTORY 3      // maximum accepted length for new computed trajectory
+#define MAX_LENGTH_NEW_TRAJECTORY 15      // maximum accepted length for new computed trajectory
 
 #ifdef INFINITY
 /* INFINITY is supported */
@@ -66,7 +66,7 @@ struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuC
   for (int i = 0; i < obstacles; i++) {
     ox[i] = POS_FLOAT_OF_BFP(obstacle_map[i].loc.x);
     oy[i] = POS_FLOAT_OF_BFP(obstacle_map[i].loc.y);
-    VERBOSE_PRINT("[OPTIMIZER] Obstacle in Map (%f/%f)\n", ox[i], oy[i]);
+    VERBOSE_PRINT("[OPTIMIZER] Obstacle %d in Map (%f/%f)\n", i+1, ox[i], oy[i]);
   }
 
   VERBOSE_PRINT("[OPTIMIZER] Received Trajectory of length: %d\n", *current_length);
