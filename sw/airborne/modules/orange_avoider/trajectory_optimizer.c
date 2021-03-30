@@ -45,7 +45,7 @@ bool out_of_bounds = false;                 // check if trajectory length exceed
 /*
  * Do the actual magic
  */
-struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *current_length, uint8_t obstacles) {
+struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *current_length, uint8_t obstacles) {
   VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
 
   // setup initial conditions required for the optimisation
@@ -84,13 +84,13 @@ struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuC
 
     VERBOSE_PRINT("[OPTIMIZER] Optimisation Failed! Keeping the old trajectory\n");
 
-    struct EnuCoor_i *optimized_trajectory;
-    optimized_trajectory = malloc(sizeof(struct EnuCoor_i) * (*current_length));
+    struct OptimizedTrajectory optimized_trajectory;
+    optimized_trajectory.size = *current_length;
 
     // then we go through the whole new Trajectory to assign the new values
     for (int i = 0; i < *current_length; i++) {
-      optimized_trajectory[i].x = start_trajectory[i].x;
-      optimized_trajectory[i].y = start_trajectory[i].y;
+      optimized_trajectory.buf[i].x = start_trajectory[i].x;
+      optimized_trajectory.buf[i].y = start_trajectory[i].y;
     }
 
     out_of_bounds = false;
@@ -106,21 +106,21 @@ struct EnuCoor_i *optimize_trajectory(struct Obstacle *obstacle_map, struct EnuC
 
   // once this is done rx and ry should be ready to be sent to the Trajectory
   // first we reallocate once the Trajectory to the new length
-  struct EnuCoor_i *optimized_trajectory;
-  optimized_trajectory = malloc(sizeof(struct EnuCoor_i) * (resulting_trajectory.size));
+    struct OptimizedTrajectory optimized_trajectory;
+    optimized_trajectory.size = *current_length;
 
   // then we go through the whole new Trajectory to assign the new values
   for (int i = 1; i < resulting_trajectory.size-1; i++) {
-    optimized_trajectory[i].x = POS_BFP_OF_REAL(resulting_trajectory.x[i+1]);
-    optimized_trajectory[i].y = POS_BFP_OF_REAL(resulting_trajectory.y[i+1]);
+    optimized_trajectory.buf[i].x = POS_BFP_OF_REAL(resulting_trajectory.x[i+1]);
+    optimized_trajectory.buf[i].y = POS_BFP_OF_REAL(resulting_trajectory.y[i+1]);
   }
 
   // append first and last point
-  optimized_trajectory[0] = first_point;
-  optimized_trajectory[resulting_trajectory.size-1] = last_point;
+  optimized_trajectory.buf[0] = first_point;
+  optimized_trajectory.buf[resulting_trajectory.size-1] = last_point;
 
   for (int i = 0; i < resulting_trajectory.size; i++) {
-    VERBOSE_PRINT("[OPTIMIZER] Adding point %f/%f\n", POS_FLOAT_OF_BFP(optimized_trajectory[i].x), POS_FLOAT_OF_BFP(optimized_trajectory[i].y));
+    VERBOSE_PRINT("[OPTIMIZER] Adding point %f/%f\n", POS_FLOAT_OF_BFP(optimized_trajectory.buf[i].x), POS_FLOAT_OF_BFP(optimized_trajectory.buf[i].y));
   }
 
   VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
