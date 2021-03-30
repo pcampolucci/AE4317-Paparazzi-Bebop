@@ -45,8 +45,8 @@ static void buildOuterTrajectory(void);
 static void buildInnerTrajectory(uint8_t currentOuterTrajIndex);
 static void moveWaypointNext(uint8_t waypoint, struct EnuCoor_i *trajectory, uint8_t index_current_waypoint);
 static void checkWaypointArrival(uint8_t waypoint_target, double *mseVar);
-static bool updateTrajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *size);
-static bool checkObstaclePresence(struct Obstacle *obstacle_map, int x_position, int y_position);
+static bool updateTrajectory(struct Obstacle *obstacle_map_ut, struct EnuCoor_i *start_trajectory, uint8_t *size);
+static bool checkObstaclePresence(struct Obstacle *obstacle_map_check, int x_position, int y_position);
 
 // define and initialise global variables
 double mse_outer;                              // mean squared error to check if we reached the outer target waypoint
@@ -209,10 +209,10 @@ void orange_avoider_periodic(void)
 /*
  * Takes the inner trajectory and overrides a new one in the allocated slots, placing the rest to zero
  */
-bool updateTrajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *size) {
+bool updateTrajectory(struct Obstacle *obstacle_map_ut, struct EnuCoor_i *start_trajectory, uint8_t *size) {
   clock_t t_trajectory; 
   t_trajectory = clock();
-  struct OptimizedTrajectory new_inner = optimize_trajectory(obstacle_map, start_trajectory, size, n_obstacles);
+  struct OptimizedTrajectory new_inner = optimize_trajectory(obstacle_map_ut, start_trajectory, size, n_obstacles);
 
   // override old trajectory with new one and zeroes if not getting all the space
   for (int i=0; i < INNER_TRAJECTORY_SPACE; i++){
@@ -285,16 +285,16 @@ void buildOuterTrajectory(void) {
 /*
  * Creates an 'inner' trajectory between the trajectory[i] and trajectory[i+1]
  */
-void buildInnerTrajectory(uint8_t outer_index){
+void buildInnerTrajectory(uint8_t outer_index_bt){
 
-  uint8_t actual_index = outer_index + 1;
+  uint8_t actual_index = outer_index_bt + 1;
 
-  if (outer_index == OUTER_TRAJECTORY_LENGTH-1) {
+  if (outer_index_bt == OUTER_TRAJECTORY_LENGTH-1) {
     actual_index = 0;
   }
 
-  float x_diff = POS_FLOAT_OF_BFP(outer_trajectory[actual_index].x) - POS_FLOAT_OF_BFP(outer_trajectory[outer_index].x);
-  float y_diff = POS_FLOAT_OF_BFP(outer_trajectory[actual_index].y) - POS_FLOAT_OF_BFP(outer_trajectory[outer_index].y);
+  float x_diff = POS_FLOAT_OF_BFP(outer_trajectory[actual_index].x) - POS_FLOAT_OF_BFP(outer_trajectory[outer_index_bt].x);
+  float y_diff = POS_FLOAT_OF_BFP(outer_trajectory[actual_index].y) - POS_FLOAT_OF_BFP(outer_trajectory[outer_index_bt].y);
   float increment_x =  x_diff/(INNER_TRAJECTORY_LENGTH);
   float increment_y = y_diff/(INNER_TRAJECTORY_LENGTH);
 
@@ -303,10 +303,10 @@ void buildInnerTrajectory(uint8_t outer_index){
   for (int i = 0; i < INNER_TRAJECTORY_LENGTH; i++){
 
     // Create set of points between current position and the desired waypoint (initialized as straight line)
-    full_trajectory[outer_index].inner_trajectory[i].x = POS_BFP_OF_REAL((i+1)*increment_x + POS_FLOAT_OF_BFP(outer_trajectory[outer_index].x));
-    full_trajectory[outer_index].inner_trajectory[i].y = POS_BFP_OF_REAL((i+1)*increment_y + POS_FLOAT_OF_BFP(outer_trajectory[outer_index].y));
+    full_trajectory[outer_index_bt].inner_trajectory[i].x = POS_BFP_OF_REAL((i+1)*increment_x + POS_FLOAT_OF_BFP(outer_trajectory[outer_index_bt].x));
+    full_trajectory[outer_index_bt].inner_trajectory[i].y = POS_BFP_OF_REAL((i+1)*increment_y + POS_FLOAT_OF_BFP(outer_trajectory[outer_index_bt].y));
 
-    VERBOSE_PRINT("[INNER TRAJECTORY] Point added: (%f/%f) \n", POS_FLOAT_OF_BFP(full_trajectory[outer_index].inner_trajectory[i].x), POS_FLOAT_OF_BFP(full_trajectory[outer_index].inner_trajectory[i].y));
+    VERBOSE_PRINT("[INNER TRAJECTORY] Point added: (%f/%f) \n", POS_FLOAT_OF_BFP(full_trajectory[outer_index_bt].inner_trajectory[i].x), POS_FLOAT_OF_BFP(full_trajectory[outer_index].inner_trajectory[i].y));
   }
 
   VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
@@ -315,12 +315,12 @@ void buildInnerTrajectory(uint8_t outer_index){
 /*
  * Checks if the obstacle being sent is already present in the map
  */
-bool checkObstaclePresence(struct Obstacle *obstacle_map, int x_position, int y_position) {
+bool checkObstaclePresence(struct Obstacle *obstacle_map_check, int x_position, int y_position) {
   
   for (int i=0; i < n_obstacles; i++) {
     // is the current obstacle close enough to an already existing one?
-    double error_x = POS_FLOAT_OF_BFP(obstacle_map[i].loc.x - x_position);
-    double error_y = POS_FLOAT_OF_BFP(obstacle_map[i].loc.y - y_position);
+    double error_x = POS_FLOAT_OF_BFP(obstacle_map_check[i].loc.x - x_position);
+    double error_y = POS_FLOAT_OF_BFP(obstacle_map_check[i].loc.y - y_position);
     double obstacle_mse = sqrt(pow(error_x,2)+pow(error_y,2));
     //VERBOSE_PRINT("Obstacle MSE is %f with %d/%d/%d/%d\n", obstacle_mse, obstacle_map[i].loc.x, obstacle_map[i].loc.y, x_position, y_position);
     if (obstacle_mse < 1 || obstacle_mse != obstacle_mse) {
