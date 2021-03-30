@@ -17,11 +17,11 @@
 #include <math.h>
 
 // struct
-extern struct EnuCoor_i *start_trajectory;
+extern struct EnuCoor_i *start_trajectory_temp;
 extern struct Obstacle *obmap;
 
 // functions declarations
-extern struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obmap, struct EnuCoor_i *start_trajectory, uint8_t *current_length, uint8_t obstacles);
+extern struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obmap, struct EnuCoor_i *start_trajectory_temp, uint8_t *current_length, uint8_t obstacles);
 extern void potential_field_planning(double sx, double sy, double gx, double gy, double *ox, double *oy, double reso, double rr);
 extern void calc_potential_field(double gx, double gy, double *ox, double *oy, double reso, double rr, double sx, double sy);
 extern double calc_attractive_potential(double x, double y, double gx, double gy);

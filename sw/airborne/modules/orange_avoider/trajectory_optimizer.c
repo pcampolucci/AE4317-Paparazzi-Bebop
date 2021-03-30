@@ -37,22 +37,25 @@
 #endif
 
 // Initialize objects and variables
-struct DPoint motion[8];                    // motion choices for trajectory
-struct Trajectory resulting_trajectory;     // final optimized trajectory object
-struct PotentialMap potential ={0,0,0,0,0};              // potential map used to find the optimal
-bool out_of_bounds = false;                 // check if trajectory length exceeds the limits
+struct DPoint motion[8];                        // motion choices for trajectory
+struct Trajectory resulting_trajectory;         // final optimized trajectory object
+struct PotentialMap potential;                  // potential map used to find the optimal
+bool out_of_bounds = false;                     // check if trajectory length exceeds the limits
+uint32_t last_size_x = 0;
+uint32_t last_size_y = 0;
+bool verbose = false;
 
 /*
  * Do the actual magic
  */
-struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obstacle_map, struct EnuCoor_i *start_trajectory, uint8_t *current_length, uint8_t obstacles) {
+struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obstacle_map_opt, struct EnuCoor_i *start_trajectory_opt, uint8_t *current_length, uint8_t obstacles) {
   VERBOSE_PRINT("------------------------------------------------------------------------------------ \n");
 
   // setup initial conditions required for the optimisation
-  double sx = POS_FLOAT_OF_BFP(start_trajectory[0].x);                      // starting point in x [m]
-  double sy = POS_FLOAT_OF_BFP(start_trajectory[0].y);                      // starting point in y [m]
-  double gx = POS_FLOAT_OF_BFP(start_trajectory[*current_length-1].x);      // final point in x [m]
-  double gy = POS_FLOAT_OF_BFP(start_trajectory[*current_length-1].y);      // final point in y [m]
+  double sx = POS_FLOAT_OF_BFP(start_trajectory_opt[0].x);                      // starting point in x [m]
+  double sy = POS_FLOAT_OF_BFP(start_trajectory_opt[0].y);                      // starting point in y [m]
+  double gx = POS_FLOAT_OF_BFP(start_trajectory_opt[*current_length-1].x);      // final point in x [m]
+  double gy = POS_FLOAT_OF_BFP(start_trajectory_opt[*current_length-1].y);      // final point in y [m]
 
   // get list of obstacles that will be inserted in the optimisation
   double ox[obstacles];
@@ -60,12 +63,12 @@ struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obstacle_map, st
 
   // get first and last point to append to the resulting trajectory
   int last_point_index = *current_length;
-  struct EnuCoor_i first_point = start_trajectory[0];
-  struct EnuCoor_i last_point = start_trajectory[last_point_index-1];
+  struct EnuCoor_i first_point = start_trajectory_opt[0];
+  struct EnuCoor_i last_point = start_trajectory_opt[last_point_index-1];
 
   for (int i = 0; i < obstacles; i++) {
-    ox[i] = POS_FLOAT_OF_BFP(obstacle_map[i].loc.x);
-    oy[i] = POS_FLOAT_OF_BFP(obstacle_map[i].loc.y);
+    ox[i] = POS_FLOAT_OF_BFP(obstacle_map_opt[i].loc.x);
+    oy[i] = POS_FLOAT_OF_BFP(obstacle_map_opt[i].loc.y);
     VERBOSE_PRINT("[OPTIMIZER] Obstacle %d in Map (%f/%f)\n", i+1, ox[i], oy[i]);
   }
 
@@ -86,8 +89,8 @@ struct OptimizedTrajectory optimize_trajectory(struct Obstacle *obstacle_map, st
 
     // then we go through the whole new Trajectory to assign the new values
     for (int i = 0; i < *current_length; i++) {
-      optimized_trajectory.buf[i].x = start_trajectory[i].x;
-      optimized_trajectory.buf[i].y = start_trajectory[i].y;
+      optimized_trajectory.buf[i].x = start_trajectory_opt[i].x;
+      optimized_trajectory.buf[i].y = start_trajectory_opt[i].y;
     }
 
     out_of_bounds = false;
@@ -135,10 +138,6 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
 
   // update old field information 
   calc_potential_field(gx, gy, ox, oy, reso, rr, sx, sy);
-  VERBOSE_PRINT("2\n");
-  // get new potential field
-  double **pmap = potential.pmap;
-  VERBOSE_PRINT("3\n");
   // search path
   double d = hypot(sx - gx, sy - gy);
   int ix = round((sx - potential.minx) / reso);
@@ -159,6 +158,7 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
   get_motion_model();
 
   while (d >= reso) {
+    // VERBOSE_PRINT("3.1\n");
     double minp = INFINITY;
     VERBOSE_PRINT("6\n");
     double motion_len = sizeof(motion) / sizeof(motion[0]);
@@ -172,12 +172,9 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
 
       if (inx >= num_rows || iny >= num_cols || inx < 0 || iny < 0) {
         p = INFINITY;
-        VERBOSE_PRINT("Outside potential \n");
       } else {
-        p = pmap[inx][iny];
-        VERBOSE_PRINT("Inside potential \n");
+        p = potential.pmap[iny*last_size_y + inx];
       }
-
       if (minp > p) {
         minp = p;
         minix = inx;
@@ -190,6 +187,7 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
     iy = miniy;
     double xp = ix * reso + potential.minx;
     double yp = iy * reso + potential.miny;
+
     d = hypot(gx - xp, gy - yp);
     VERBOSE_PRINT("7\n");
     // check if we are going out of bounds
@@ -203,15 +201,12 @@ void potential_field_planning(double sx, double sy, double gx, double gy, double
     // now we can expand the solution space and add a new point
     rx[trajectory_size-1] = xp;
     ry[trajectory_size-1] = yp;
-    // VERBOSE_PRINT("Found (%f/%f) as new optimal point at index %d\n", rx[trajectory_size-1], ry[trajectory_size-1], trajectory_size);
-    VERBOSE_PRINT("9\n");
   }
 
   // update trajectory message 
   resulting_trajectory.x = rx;
   resulting_trajectory.y = ry;
   resulting_trajectory.size = trajectory_size;
-
 }
 
 /*
@@ -221,9 +216,16 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
 {
 
   //VERBOSE_PRINT("Calculating Potential Map \n");
-  VERBOSE_PRINT("1.1\n");
-  int ox_len = round(sizeof(ox) / sizeof(ox[0]));
-  int oy_len = round(sizeof(oy) / sizeof(oy[0]));
+  int ox_len = 0;
+  int oy_len = 0;
+  if (sizeof(ox[0]) ==0 || sizeof(oy[0]) ==0){
+    ox_len =0;
+    oy_len =0;
+  }
+  else {
+    ox_len = round(sizeof(ox) / sizeof(ox[0]));
+    oy_len = round(sizeof(oy) / sizeof(oy[0]));
+  }
   // get map contour
   potential.minx = Min(Min(MinArray(ox, ox_len), sx), gx) - AREA_WIDTH / 2.0;
   potential.miny = Min(Min(MinArray(oy, oy_len), sy), gy) - AREA_WIDTH / 2.0;
@@ -242,11 +244,12 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
   }
 
   // build an array representring the map
-  double **pmap = malloc(sizeof(double*) * xw);
-  VERBOSE_PRINT("1.3\n");
-  for(uint32_t i = 0; i < xw; i++) {
-        pmap[i] = malloc(sizeof(double*) * yw);
-    }
+  last_size_x = xw;
+  last_size_y = yw;
+
+  potential.size_x = xw;
+  potential.size_y = yw;
+
 
   potential.pmap = pmap;
   potential.size_x = xw;
@@ -261,18 +264,13 @@ void calc_potential_field(double gx, double gy, double *ox, double *oy, double r
       double ug = calc_attractive_potential(x, y, gx, gy);
       double uo = calc_repulsive_potential(x, y, ox, oy, rr);
       double uf = ug + uo;
-      pmap[ix][iy] = uf;
+
+      if(iy*yw + ix > MAX_PMAP_SIZE){
+        break;
+      }
+      potential.pmap[iy*yw + ix] = uf;
     }
   }
-  VERBOSE_PRINT("1.4\n");
-  // update potential map
-
-  VERBOSE_PRINT("1.5\n");
-  // for(uint32_t i = 0; i < xw; i++) {
-  //   free(pmap[i]); 
-  // }
-  // free(pmap);
-  VERBOSE_PRINT("1.6\n");
 }
 
 /*
